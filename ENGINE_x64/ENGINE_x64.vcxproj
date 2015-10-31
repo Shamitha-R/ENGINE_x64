@@ -81,12 +81,15 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
+    <IncludePath>C:\Users\Shamitha\Documents\Visual Studio 2015\Projects\ENGINE_x64\Dependencies\SDL\SDL2-devel-2.0.3-VC\SDL2-2.0.3\include;C:\Users\Shamitha\Documents\Visual Studio 2015\Projects\ENGINE_x64\Dependencies\SDL\SDL2_image-devel-2.0.0-VC\SDL2_image-2.0.0\include;C:\Users\Shamitha\Documents\Visual Studio 2015\Projects\ENGINE_x64\Dependencies\SDL\SDL2_ttf-devel-2.0.12-VC\SDL2_ttf-2.0.12\include;C:\Users\Shamitha\Documents\Visual Studio 2015\Projects\ENGINE_x64\Dependencies\glm-0.9.7.1\glm\glm;C:\Users\Shamitha\Documents\Visual Studio 2015\Projects\ENGINE_x64\Dependencies\glew-1.13.0-win32\glew-1.13.0\include\GL;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
+    <IncludePath>C:\Users\Shamitha\Documents\Visual Studio 2015\Projects\ENGINE_x64\Dependencies\glew-1.13.0-win32\glew-1.13.0\include\GL;C:\Users\Shamitha\Documents\Visual Studio 2015\Projects\ENGINE_x64\Dependencies\glm-0.9.7.1\glm\glm;C:\Users\Shamitha\Documents\Visual Studio 2015\Projects\ENGINE_x64\Dependencies\SDL\SDL2-devel-2.0.3-VC\SDL2-2.0.3\include;C:\Users\Shamitha\Documents\Visual Studio 2015\Projects\ENGINE_x64\Dependencies\SDL\SDL2_ttf-devel-2.0.12-VC\SDL2_ttf-2.0.12\include;C:\Users\Shamitha\Documents\Visual Studio 2015\Projects\ENGINE_x64\Dependencies\SDL\SDL2_image-devel-2.0.0-VC\SDL2_image-2.0.0\include;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\Users\Shamitha\Documents\Visual Studio 2015\Projects\ENGINE_x64\Dependencies\glew-1.13.0-win32\glew-1.13.0\lib\Release\x64;C:\Users\Shamitha\Documents\Visual Studio 2015\Projects\ENGINE_x64\Dependencies\SDL\SDL2_image-devel-2.0.0-VC\SDL2_image-2.0.0\lib\x64;C:\Users\Shamitha\Documents\Visual Studio 2015\Projects\ENGINE_x64\Dependencies\SDL\SDL2_ttf-devel-2.0.12-VC\SDL2_ttf-2.0.12\lib\x64;C:\Users\Shamitha\Documents\Visual Studio 2015\Projects\ENGINE_x64\Dependencies\SDL\SDL2-devel-2.0.3-VC\SDL2-2.0.3\lib\x64;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <Intel_OpenCL_Build_Rules>
@@ -121,7 +124,7 @@
     </ClCompile>
     <Link>
       <AdditionalLibraryDirectories>$(INTELOCLSDKROOT)lib\x86;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>opencl.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>SDL2.lib;SDL2main.lib;SDL2_image.lib;SDL2_ttf.lib;opengl32.lib;glew32.lib;opencl.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
     </Link>
@@ -172,7 +175,7 @@
     </ClCompile>
     <Link>
       <AdditionalLibraryDirectories>$(INTELOCLSDKROOT)lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>OpenCL.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>SDL2.lib;SDL2main.lib;SDL2_image.lib;SDL2_ttf.lib;opengl32.lib;glew32.lib;OpenCL.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
     <PostBuildEvent>
@@ -181,6 +184,13 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="EngineKernel.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\..\..\Visual Studio 2013\Projects\ENGINE_WIN old\ENGINE_WIN\Engine.h" />
+    <ClInclude Include="..\..\..\..\Visual Studio 2013\Projects\ENGINE_WIN old\ENGINE_WIN\EngineBehaviour.h" />
+    <ClInclude Include="..\..\..\..\Visual Studio 2013\Projects\ENGINE_WIN old\ENGINE_WIN\EngineRuntime.h" />
+    <ClInclude Include="..\..\..\..\Visual Studio 2013\Projects\ENGINE_WIN old\ENGINE_WIN\obj_loader.h" />
+    <ClInclude Include="..\..\..\..\Visual Studio 2013\Projects\ENGINE_WIN old\ENGINE_WIN\stb_image.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
