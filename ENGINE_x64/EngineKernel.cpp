@@ -14,6 +14,9 @@ int main()
 	std::vector<cl_platform_id> platformIds(platformIdCount);
 	clGetPlatformIDs(platformIdCount, platformIds.data(), nullptr);
 	
+	int i;
+	std::cin >> i;
+
 	return 0;
 }
 
