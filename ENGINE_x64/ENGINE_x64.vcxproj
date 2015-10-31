@@ -202,12 +202,6 @@
     <ClInclude Include="obj_loader.h" />
     <ClInclude Include="stb_image.h" />
   </ItemGroup>
-  <ItemGroup>
-    <Object Include="meshes\box.obj" />
-    <Object Include="meshes\cmt.obj" />
-    <Object Include="meshes\monkey3.obj" />
-    <Object Include="meshes\test.obj" />
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
     <Import Project="$(VCTargetsPath)\BuildCustomizations\IntelOpenCL.targets" />
