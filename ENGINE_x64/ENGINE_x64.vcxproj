@@ -183,14 +183,19 @@
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Engine.cpp" />
+    <ClCompile Include="EngineBehaviour.cpp" />
     <ClCompile Include="EngineKernel.cpp" />
+    <ClCompile Include="EngineRuntime.cpp" />
+    <ClCompile Include="obj_loader.cpp" />
+    <ClCompile Include="stb_image.c" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\..\..\Visual Studio 2013\Projects\ENGINE_WIN old\ENGINE_WIN\Engine.h" />
-    <ClInclude Include="..\..\..\..\Visual Studio 2013\Projects\ENGINE_WIN old\ENGINE_WIN\EngineBehaviour.h" />
-    <ClInclude Include="..\..\..\..\Visual Studio 2013\Projects\ENGINE_WIN old\ENGINE_WIN\EngineRuntime.h" />
-    <ClInclude Include="..\..\..\..\Visual Studio 2013\Projects\ENGINE_WIN old\ENGINE_WIN\obj_loader.h" />
-    <ClInclude Include="..\..\..\..\Visual Studio 2013\Projects\ENGINE_WIN old\ENGINE_WIN\stb_image.h" />
+    <ClInclude Include="Engine.h" />
+    <ClInclude Include="EngineBehaviour.h" />
+    <ClInclude Include="EngineRuntime.h" />
+    <ClInclude Include="obj_loader.h" />
+    <ClInclude Include="stb_image.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

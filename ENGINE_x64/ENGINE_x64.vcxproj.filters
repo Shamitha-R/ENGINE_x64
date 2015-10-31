@@ -18,21 +18,36 @@
     <ClCompile Include="EngineKernel.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Engine.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="EngineRuntime.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="obj_loader.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="stb_image.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="EngineBehaviour.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\..\..\Visual Studio 2013\Projects\ENGINE_WIN old\ENGINE_WIN\Engine.h">
+    <ClInclude Include="Engine.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\..\Visual Studio 2013\Projects\ENGINE_WIN old\ENGINE_WIN\EngineBehaviour.h">
+    <ClInclude Include="EngineRuntime.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\..\Visual Studio 2013\Projects\ENGINE_WIN old\ENGINE_WIN\EngineRuntime.h">
+    <ClInclude Include="obj_loader.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\..\Visual Studio 2013\Projects\ENGINE_WIN old\ENGINE_WIN\obj_loader.h">
+    <ClInclude Include="stb_image.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\..\..\Visual Studio 2013\Projects\ENGINE_WIN old\ENGINE_WIN\stb_image.h">
+    <ClInclude Include="EngineBehaviour.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
