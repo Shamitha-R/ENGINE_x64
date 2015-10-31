@@ -1,6 +1,7 @@
 #include "EngineRuntime.h"
 #include "Engine.h"
 
+
 EngineRuntime::EngineRuntime()
 {
 }
@@ -166,7 +167,7 @@ void EngineRuntime::Render()
 	//}
 }
 
-int main(int argc, char* args[])
+int RenderOpenGL()
 {
 
 	EngineRuntime engine;
@@ -211,7 +212,7 @@ int main(int argc, char* args[])
 			angle += 0.01f;
 			transform.GetRotation().y = angle;
 			transform.GetRotation().z = angle;
-			//transform.SetScale(glm::vec3(1, 0.5f, 1));
+			transform.SetScale(glm::vec3(1, 0.5f, 1));
 
 			while (SDL_PollEvent(&e) != 0)
 			{	
@@ -241,7 +242,7 @@ int main(int argc, char* args[])
 		SDL_StopTextInput();
 	}
 
-	//engine.~EngineRuntime();
+	engine.~EngineRuntime();
 
 	return 0;
 }

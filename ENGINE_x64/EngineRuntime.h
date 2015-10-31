@@ -20,7 +20,8 @@ public:
 	void HandleInput(unsigned char targetKey, int xPos, int yPos);
 	void Update();
 	void Render();
-		
+
+
 private:
 	bool InitializeOpenGL();
 
