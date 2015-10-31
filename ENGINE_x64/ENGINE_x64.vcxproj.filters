@@ -51,4 +51,10 @@
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
+  <ItemGroup>
+    <Object Include="meshes\box.obj" />
+    <Object Include="meshes\test.obj" />
+    <Object Include="meshes\monkey3.obj" />
+    <Object Include="meshes\cmt.obj" />
+  </ItemGroup>
 </Project>
