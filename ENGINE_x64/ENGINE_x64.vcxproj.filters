@@ -51,35 +51,4 @@
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
-  <ItemGroup>
-    <Object Include="meshes\box.obj" />
-    <Object Include="meshes\cmt.obj" />
-    <Object Include="meshes\monkey3.obj" />
-    <Object Include="meshes\test.obj" />
-    <Object Include="x64\Debug\Engine.obj" />
-    <Object Include="x64\Debug\EngineKernel.obj" />
-    <Object Include="x64\Debug\obj_loader.obj" />
-    <Object Include="x64\Debug\EngineRuntime.obj" />
-    <Object Include="x64\Debug\stb_image.obj" />
-    <Object Include="x64\Debug\EngineBehaviour.obj" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="shaders\basicshader.fs" />
-    <None Include="shaders\basicshader.vs" />
-    <None Include="x64\Debug\vc140.idb" />
-    <None Include="x64\Debug\vc140.pdb" />
-    <None Include="x64\Debug\ENGINE_x64.tlog\CL.command.1.tlog" />
-    <None Include="x64\Debug\ENGINE_x64.tlog\link.write.1.tlog" />
-    <None Include="x64\Debug\ENGINE_x64.tlog\link.command.1.tlog" />
-    <None Include="x64\Debug\ENGINE_x64.tlog\link.read.1.tlog" />
-    <None Include="x64\Debug\ENGINE_x64.tlog\CL.write.1.tlog" />
-    <None Include="x64\Debug\ENGINE_x64.tlog\ENGINE_x64.lastbuildstate" />
-    <None Include="x64\Debug\ENGINE_x64.tlog\CL.read.1.tlog" />
-  </ItemGroup>
-  <ItemGroup>
-    <Image Include="textures\test.png" />
-  </ItemGroup>
-  <ItemGroup>
-    <Text Include="x64\Debug\ENGINE_x64.log" />
-  </ItemGroup>
 </Project>
