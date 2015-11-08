@@ -1,12 +1,13 @@
-#include "EngineRuntime.h"
-#include "Engine.h"
+#include "EngineRenderer.h"
 
+//The surface contained by the window
+SDL_Surface* gScreenSurface = NULL;
 
-EngineRuntime::EngineRuntime()
+EngineRenderer::EngineRenderer()
 {
 }
 
-EngineRuntime::~EngineRuntime()
+EngineRenderer::~EngineRenderer()
 {
 	//Destroy window	
 	SDL_DestroyWindow(EngineWindow);
@@ -18,7 +19,7 @@ EngineRuntime::~EngineRuntime()
 	printf("Engine Terminated\n");
 }
 
-bool EngineRuntime::InitializeEngine()
+bool EngineRenderer::InitializeEngine()
 {
 	printf("Initializing Engine\n");
 
@@ -34,8 +35,8 @@ bool EngineRuntime::InitializeEngine()
 	else
 	{
 		//Use OpenGL 2.1
-		//SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
-		//SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+		//SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+		//SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, );
 		SDL_GL_SetAttribute(SDL_GL_BUFFER_SIZE, 32);
 		SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 16);
 		SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
@@ -54,6 +55,19 @@ bool EngineRuntime::InitializeEngine()
 		}
 		else
 		{
+			//Initialize PNG loading
+			int imgFlags = IMG_INIT_PNG;
+			if (!(IMG_Init(imgFlags) & imgFlags))
+			{
+				printf("SDL_image could not initialize! SDL_image Error: %s\n", IMG_GetError());
+				success = false;
+			}
+			else
+			{
+				//Get window surface
+				gScreenSurface = SDL_GetWindowSurface(EngineWindow);
+			}
+
 			//Create context
 			EngineContext = SDL_GL_CreateContext(EngineWindow);
 			if (EngineContext == NULL)
@@ -75,6 +89,8 @@ bool EngineRuntime::InitializeEngine()
 					printf("Unable to initialize OpenGL!\n");
 					success = false;
 				}
+
+
 			}
 		}
 	}
@@ -82,7 +98,7 @@ bool EngineRuntime::InitializeEngine()
 	return success;
 }
 
-bool EngineRuntime::InitializeOpenGL()
+bool EngineRenderer::InitializeOpenGL()
 {
 	printf("Initializing OpenGL\n");
 
@@ -121,6 +137,7 @@ bool EngineRuntime::InitializeOpenGL()
 		success = false;
 	}
 
+	glewExperimental = GL_TRUE;
 	// Initialize GLEW
 	GLenum err = glewInit();
 	if (GLEW_OK != err)
@@ -129,15 +146,15 @@ bool EngineRuntime::InitializeOpenGL()
 		//printf("Error: %s\n", glewGetErrorString(err));
 	}
 
-	glEnable(GL_DEPTH_TEST);
+	//glEnable(GL_DEPTH_TEST);
 
-	glEnable(GL_CULL_FACE);
-	glCullFace(GL_BACK);
+	//glEnable(GL_CULL_FACE);
+	//glCullFace(GL_BACK);
 
 	return success;
 }
 
-void EngineRuntime::HandleInput(unsigned char targetKey, int xPos, int yPos)
+void EngineRenderer::HandleInput(unsigned char targetKey, int xPos, int yPos)
 {
 	//Toggle Rendering
 	if (targetKey == 'q')
@@ -146,104 +163,55 @@ void EngineRuntime::HandleInput(unsigned char targetKey, int xPos, int yPos)
 	}
 }
 
-void EngineRuntime::Update()
-{
-	
+void EngineRenderer::Update()
+{	
 }
 
-void EngineRuntime::Render()
+void EngineRenderer::Render()
 {
 	//Clear color buffer
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-	//if (EnableRendering)
-	//{
-	//	glBegin(GL_QUADS);
-	//	glVertex2f(-0.5f, -0.25f);
-	//	glVertex2f(0.5f, -0.5f);
-	//	glVertex2f(0.5f, 0.5f);
-	//	glVertex2f(-0.5f, 0.5f);
-	//	glEnd();
-	//}
 }
 
-int RenderOpenGL()
+SDL_Surface* EngineRenderer::LoadSurface(std::string path)
 {
+	//The final optimized image
+	SDL_Surface* optimizedSurface = NULL;
 
-	EngineRuntime engine;
+	SDL_PixelFormat pf;
+	pf.palette = 0;
+	pf.BitsPerPixel = 32;
+	pf.BytesPerPixel = 4;
+	//pf.alpha = 255;
+	pf.Rshift = pf.Rloss = pf.Gloss = pf.Bloss = pf.Aloss = 0;
+	pf.Rmask = 0x000000ff;
+	pf.Gshift = 8;
+	pf.Gmask = 0x0000ff00;
+	pf.Bshift = 16;
+	pf.Bmask = 0x00ff0000;
+	pf.Ashift = 24;
+	pf.Amask = 0xff000000;
+	pf.refcount = 1;
 
-	if (!engine.InitializeEngine())
+	//Load image at specified path
+	SDL_Surface* loadedSurface = IMG_Load(path.c_str());
+	if (loadedSurface == NULL)
 	{
-		printf("Engine Initialization Failed\n");
+		printf("Unable to load image %s! SDL_image Error: %s\n", path.c_str(), IMG_GetError());
 	}
 	else
 	{
-		EngineVertex vertices[] = {
-			EngineVertex(glm::vec3(-0.5, -0.5, 0), glm::vec2(0.0, 1.0)),
-			EngineVertex(glm::vec3(-0.5, 0.5, 0), glm::vec2(0.0,0.0)),
-			EngineVertex(glm::vec3(0.5, 0.5, 0), glm::vec2(1.0, 0.0)),
-			EngineVertex(glm::vec3(0.5, -0.5, 0), glm::vec2(1.0,1.0))
-		};
-
-		unsigned int indicesArray[] = { 0, 1, 2 };
-
-		//EngineObject eObject(vertices, sizeof(vertices) / sizeof(vertices[0]),
-		//	indicesArray,sizeof(indicesArray)/sizeof(indicesArray[0]));
-		EngineObject eObject("./meshes/test.obj");
-
-		EngineTexture eTexture("./textures/test.png");
-		EngineShader eshader("./shaders/basicshader");
-		EngineTransform transform;
-		EngineCamera camera(glm::vec3(0, 0, -100), 70.0f, 
-			(float)engine.SCREENWIDTH/(float)engine.SCREENHEIGHT,
-			0.01f,1000.0f);
-
-		float angle = 0.0f;
-
-		printf("Engine Running...\n");
-
-		bool quit = false;
-
-		SDL_Event e;
-		SDL_StartTextInput();
-
-		while (!quit)
+		//Convert surface to screen format
+		optimizedSurface = SDL_ConvertSurface(loadedSurface, &pf, SDL_SWSURFACE);
+		if (optimizedSurface == NULL)
 		{
-			angle += 0.01f;
-			transform.GetRotation().y = angle;
-			transform.GetRotation().z = angle;
-			transform.SetScale(glm::vec3(1, 0.5f, 1));
-
-			while (SDL_PollEvent(&e) != 0)
-			{	
-				if (e.type == SDL_QUIT)
-				{
-					quit = true;
-				}
-				else if (e.type == SDL_TEXTINPUT)
-				{
-					int x = 0, y = 0;
-					SDL_GetMouseState(&x, &y);
-					engine.HandleInput(e.text.text[0], x, y);
-				}
-			}
-
-			eshader.BindShader();
-			eshader.Update(transform,camera);
-
-			eTexture.Bind(0);
-			eObject.RenderObject();
-
-			SDL_GL_SwapWindow(engine.EngineWindow);
-			engine.Render();
+			printf("Unable to optimize image %s! SDL Error: %s\n", path.c_str(), SDL_GetError());
 		}
 
-		
-		SDL_StopTextInput();
+		//Get rid of old loaded surface
+		SDL_FreeSurface(loadedSurface);
 	}
 
-	engine.~EngineRuntime();
-
-	return 0;
+	return optimizedSurface;
 }
 
