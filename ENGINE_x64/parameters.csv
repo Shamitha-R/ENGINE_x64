@@ -1,0 +1,21 @@
+Date and Time, 30/10/2014 15:36:13
+Total number of B-Scans, 500
+Total number of A-Scans per B-Scan, 500
+A-Scan Averaging Factor, 1
+B-Scan Averaging Factor, 1
+Spectrum Length, 1024
+AScan Length, 1024
+A-Scan Rate (Hz), 50000
+Minimum scanner voltage in X (across B-Scan width), -1.5
+Maximum scanner voltage in X (across B-Scan width), 1.5
+Minimum scanner voltage in Y, -1.5
+Maximum scanner voltage in Y, 1.5
+Air temperature, 26.0179481506348
+Immersion temperature, 26.702299118042
+Notes, (z-stack index 0)
+Window Type, Gaussian
+Min. Value, -160
+Max. Value, -60
+X Translation Stage Position, 146
+Y Translation Stage Position, 155
+Z Translation Stage Position, 1

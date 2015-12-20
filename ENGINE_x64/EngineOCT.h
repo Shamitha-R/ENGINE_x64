@@ -3,17 +3,20 @@
 #include <vector>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 
 #include <CL/cl.h>
 #include <CL/cl_platform.h>
 #include <CL/opencl.h>
 
+
 class EngineOCT
 {
 public:
-	std::vector<std::string> ResamplingTableData;
-	std::vector<std::string> ReferenceAScanData;
-	std::vector<std::string> ReferenceSpectrumData;
+	std::vector<float> ResamplingTableData;
+	std::vector<float> ReferenceAScanData;
+	std::vector<float> ReferenceSpectrumData;
+	std::vector<short int> HostSpectraData;
 
 	const int INPUTSPECTRALENGTH = 1024;
 	const int OUTPUTASCANLENGTH = 1024;
@@ -23,7 +26,8 @@ public:
 	const int BSCANAVERAGINGFACTOR = 1;
 
 	void LoadOCTData();
+	void OpenCLCompute();
 
 private:
-	void LoadFileData(std::string fileName, std::vector<std::string> &data);
+	void LoadFileData(std::string fileName, std::vector<float> &data);
 };

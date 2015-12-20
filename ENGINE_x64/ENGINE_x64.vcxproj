@@ -88,8 +88,8 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>C:\Users\Shamitha\Documents\Visual Studio 2015\Projects\ENGINE_x64\Dependencies\SDL\SDL2_image-devel-2.0.0-VC\SDL2_image-2.0.0\include;C:\Users\Shamitha\Documents\Visual Studio 2015\Projects\ENGINE_x64\Dependencies\AntTweakBar_116\AntTweakBar\include;C:\Users\Shamitha\Documents\Visual Studio 2015\Projects\ENGINE_x64\Dependencies\glew-1.13.0-win32\glew-1.13.0\include\GL;C:\Users\Shamitha\Documents\Visual Studio 2015\Projects\ENGINE_x64\Dependencies\glm-0.9.7.1\glm\glm;C:\Users\Shamitha\Documents\Visual Studio 2015\Projects\ENGINE_x64\Dependencies\SDL\SDL2-devel-2.0.3-VC\SDL2-2.0.3\include;C:\Users\Shamitha\Documents\Visual Studio 2015\Projects\ENGINE_x64\Dependencies\SDL\SDL2_ttf-devel-2.0.12-VC\SDL2_ttf-2.0.12\include;$(IncludePath)</IncludePath>
-    <LibraryPath>C:\Users\Shamitha\Documents\Visual Studio 2015\Projects\ENGINE_x64\Dependencies\SDL\SDL2_image-devel-2.0.0-VC\SDL2_image-2.0.0\lib\x64;C:\Users\Shamitha\Documents\Visual Studio 2015\Projects\ENGINE_x64\Dependencies\AntTweakBar_116\AntTweakBar\lib;C:\Users\Shamitha\Downloads\GL Files\GL Files\GLUI_Lib;C:\Users\Shamitha\Documents\Visual Studio 2015\Projects\ENGINE_x64\Dependencies\glew-1.13.0-win32\glew-1.13.0\lib\Release\x64;C:\Users\Shamitha\Documents\Visual Studio 2015\Projects\ENGINE_x64\Dependencies\SDL\SDL2_ttf-devel-2.0.12-VC\SDL2_ttf-2.0.12\lib\x64;C:\Users\Shamitha\Documents\Visual Studio 2015\Projects\ENGINE_x64\Dependencies\SDL\SDL2-devel-2.0.3-VC\SDL2-2.0.3\lib\x64;$(LibraryPath)</LibraryPath>
+    <IncludePath>C:\Users\Shamitha\Documents\Visual Studio 2015\Projects\ENGINE_x64\Dependencies\SDL\SDL2_image-devel-2.0.0-VC\SDL2_image-2.0.0\include;C:\Users\Shamitha\Documents\Visual Studio 2015\Projects\ENGINE_x64\Dependencies\AntTweakBar_116\AntTweakBar\include;C:\Users\Shamitha\Documents\Visual Studio 2015\Projects\ENGINE_x64\Dependencies\glew-1.13.0-win32\glew-1.13.0\include\GL;C:\Users\Shamitha\Documents\Visual Studio 2015\Projects\ENGINE_x64\Dependencies\glm-0.9.7.1\glm\glm;C:\Users\Shamitha\Documents\Visual Studio 2015\Projects\ENGINE_x64\Dependencies\SDL\SDL2-devel-2.0.3-VC\SDL2-2.0.3\include;C:\Users\Shamitha\Documents\Visual Studio 2015\Projects\ENGINE_x64\Dependencies\SDL\SDL2_ttf-devel-2.0.12-VC\SDL2_ttf-2.0.12\include;C:\Users\Shamitha\Documents\Visual Studio 2015\Projects\ENGINE_x64\Dependencies\clFFT-2.8.0-Windows-x64\clFFT-2.8.0-Windows-x64\include;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\Users\Shamitha\Documents\Visual Studio 2015\Projects\ENGINE_x64\Dependencies\clFFT-2.8.0-Windows-x64\clFFT-2.8.0-Windows-x64\lib64\import;C:\Users\Shamitha\Documents\Visual Studio 2015\Projects\ENGINE_x64\Dependencies\SDL\SDL2_image-devel-2.0.0-VC\SDL2_image-2.0.0\lib\x64;C:\Users\Shamitha\Documents\Visual Studio 2015\Projects\ENGINE_x64\Dependencies\AntTweakBar_116\AntTweakBar\lib;C:\Users\Shamitha\Downloads\GL Files\GL Files\GLUI_Lib;C:\Users\Shamitha\Documents\Visual Studio 2015\Projects\ENGINE_x64\Dependencies\glew-1.13.0-win32\glew-1.13.0\lib\Release\x64;C:\Users\Shamitha\Documents\Visual Studio 2015\Projects\ENGINE_x64\Dependencies\SDL\SDL2_ttf-devel-2.0.12-VC\SDL2_ttf-2.0.12\lib\x64;C:\Users\Shamitha\Documents\Visual Studio 2015\Projects\ENGINE_x64\Dependencies\SDL\SDL2-devel-2.0.3-VC\SDL2-2.0.3\lib\x64;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <Intel_OpenCL_Build_Rules>
@@ -175,7 +175,7 @@
     </ClCompile>
     <Link>
       <AdditionalLibraryDirectories>$(INTELOCLSDKROOT)lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>sdl2_image.lib;AntTweakBar64.lib;OpenCL.lib;SDL2.lib;SDL2main.lib;SDL2_ttf.lib;opengl32.lib;glew32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>sdl2_image.lib;AntTweakBar64.lib;OpenCL.lib;SDL2.lib;SDL2main.lib;SDL2_ttf.lib;opengl32.lib;glew32.lib;clFFT.lib;StatTimer.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
       <IgnoreSpecificDefaultLibraries>
@@ -199,6 +199,9 @@
     <ClInclude Include="EngineOCT.h" />
     <ClInclude Include="EngineRenderer.h" />
     <ClInclude Include="UI.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Intel_OpenCL_Build_Rules Include="test.cl" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
