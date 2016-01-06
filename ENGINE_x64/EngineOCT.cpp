@@ -4,18 +4,32 @@
 
 #include <clFFT.h>
 
-#define MEM_SIZE (128)
-#define MAX_SOURCE_SIZE (0x100000)
-#define INTERPOLATION_ORDER 2
+#define NUM_PLATFORMS 1
+#define NUM_DEVICES 2
+#define SELECTED_PLATFORM 2
+#define MAX_PROGRAM_FILE_LENGTH 10240000
+#define DEVICE_INFO_RETURN_SIZE 1024
+#define NUM_DEVICES_TO_BUILD_FOR 1	// Number of devices to build a program for - should be 1, just build for the main GPU
+#define INTERPOLATION_ORDER 2		// Use second order interpolation
+//
+// Define the window type constants
+//
+#define WINDOW_TYPE_NONE	0
+#define WINDOW_TYPE_HANN	1
+#define WINDOW_TYPE_BLACKMAN 2
+#define WINDOW_TYPE_GAUSSIAN 3
 
-void EngineOCT::LoadFileData(std::string fileName,std::vector<float> &data)
+#define GPU_DEVICE_INDEX 0 
+#include <chrono>
+
+void EngineOCT::LoadFileData(std::string fileName, std::vector<float> &data)
 {
 	std::string currentLine;
 	std::ifstream fileStreamer;
 
 	fileStreamer.open(fileName);
 
-	if(fileStreamer.is_open())
+	if (fileStreamer.is_open())
 	{
 		int splitLoc = 0;
 
@@ -27,7 +41,8 @@ void EngineOCT::LoadFileData(std::string fileName,std::vector<float> &data)
 		fileStreamer.close();
 		std::cout << fileName + " successfully read\n";
 
-	}else std::cout << "Unable to open file";
+	}
+	else std::cout << "Unable to open file";
 }
 
 //TODO REWRITE Spectra bin loading function
@@ -57,9 +72,9 @@ void EngineOCT::LoadOCTData()
 	LoadFileData("referenceAScan.csv", ReferenceAScanData);
 	LoadFileData("referenceSpectrum.csv", ReferenceSpectrumData);
 
-	std::vector<short> test = readFile("Spectra.bin");
-	HostSpectraData = test;
-	std::cout << "Spectra.bin successfully read\n";
+	//std::vector<short> test = readFile("Spectra.bin");
+	//HostSpectraData = test;
+	//std::cout << "Spectra.bin successfully read\n";
 }
 
 int TW_CALL TwEventSDL20(const void *sdlEvent)
@@ -165,7 +180,7 @@ void EngineRendering(EngineOCT &oct)
 	else
 	{
 		UI engineUI;
-		engineUI.InitialiseUI(engine.SCREENWIDTH, engine.SCREENHEIGHT,oct);
+		engineUI.InitialiseUI(engine.SCREENWIDTH, engine.SCREENHEIGHT, oct);
 
 		// Build and compile our shader program
 		Shader ourShader("shaders/vertexshader.vs", "shaders/fragmentshader.fs");
@@ -317,7 +332,590 @@ void EngineRendering(EngineOCT &oct)
 	engine.~EngineRenderer();
 }
 
-void PreComputeInterpolationCoefficients(std::vector<float> &resamplingTable, std::vector<float> &coefs, int ResamplingTableLength)
+//
+// Create some global variables
+//
+// cloct.h
+//
+clfftSetupData _clfftSetupData;
+clfftPlanHandle _clfftPlanHandle;
+size_t _fftLength;
+char* _kernelPath;
+
+size_t _tempBufferSize;
+cl_mem _deviceTemporaryBuffer;
+float* _interpolationMatrix;
+//
+// clfunctions.h
+//
+cl_platform_id*		_platformIDs;
+cl_device_id*		_deviceIDs;
+cl_context			_context;
+char**				_deviceNameList;	// Array of devices names
+cl_uint				_numDevices;
+cl_command_queue	_commandQueue;
+cl_uint				_numCommandQueues;
+cl_uint				_selectedDeviceIndex;		// Device selected - default it 0... only use 1 device forthe moment
+size_t              _maxWorkGroupSize;
+size_t              _preProcessKernelWorkGroupSize;
+size_t              _postProcessKernelWorkGroupSize;
+
+char*               _compilerOptions;
+
+cl_uint _inputSpectrumLength;
+cl_uint _outputAScanLength;
+cl_uint _outputImageHeight;
+cl_uint _numBScans;
+cl_uint _numAScansPerBScan;
+cl_uint _ascanAveragingFactor;
+cl_uint _bscanAveragingFactor;
+cl_uint _windowType;
+cl_uint _imageFormatStride;
+cl_uint _corrSizeX;
+cl_uint _corrSizeY;
+cl_uint _corrSizeZ;
+cl_uint _offsetX;
+cl_uint _offsetY;
+cl_uint _offsetZ;
+
+size_t _totalBScans;
+size_t _totalAScans;
+size_t _totalInputSpectraLength;
+size_t _totalOutputAScanLength;
+size_t _totalPreProcessedSpectraLength;
+size_t _totalAScansPerBScan;
+size_t _bitmapBScanVolumeSize;
+size_t _bitmapBScanSize;
+
+BOOL _correlationUsesLogBScans;
+
+cl_program			_clOCTProgram;
+cl_kernel _preProcessingKernel;
+cl_kernel _postProcessingKernel;
+cl_kernel _imageKernel;
+cl_kernel corrKernel;
+
+cl_mem deviceSpectra;					// Input array of spectra that make up a single B-Scan
+cl_mem bScanCorrData;
+cl_mem devicePreProcessedSpectra;			// Resampled, windowed, etc, spectra
+cl_mem deviceFourierTransform;
+
+cl_mem deviceEnvBScan;
+cl_mem deviceCorrelationMap;        // Stored B-Scan correlation maps
+cl_mem deviceLogEnvBScan;
+cl_mem deviceResamplingTable;
+cl_mem deviceInterpolationMatrix;	// Pre-computed matrix of values used for interpolation
+cl_mem deviceReferenceSpectrum;
+cl_mem deviceReferenceAScan;
+cl_mem deviceSum;
+cl_mem deviceSAM;
+cl_mem deviceAttenuationDepth;
+cl_mem deviceBScanBmp;
+
+char* clOCTLoadKernelSourceFromFile(char* sourceFile, unsigned int* len)
+{
+	//
+	// Load a source cl file into a string.  Len is the length of the returned source file in characters, or negative if an error occurred
+	// Return the loaded file as a null terminated string, or NULL if an error ocurred
+	//
+	int c;
+	unsigned int i;
+	unsigned int index = 0;
+	char* tmpFileContent = (char*)malloc(sizeof(char) * MAX_PROGRAM_FILE_LENGTH);	// Specify maximum file length in character
+	char* fileContent;
+	FILE *file;
+	file = fopen(sourceFile, "r");
+
+	if (file)
+	{
+		while (((c = getc(file)) != EOF) && (index < MAX_PROGRAM_FILE_LENGTH))	// c is integer because EOF can be signed
+		{
+			tmpFileContent[index] = (char)c;
+			index++;
+		}
+		fclose(file);
+
+
+		if (index == MAX_PROGRAM_FILE_LENGTH)
+		{
+			*len = -2;
+			return NULL;
+		}
+
+		// Copy to a new array of the correct size
+
+		fileContent = (char*)malloc(sizeof(char)*index);
+		for (i = 0; i< index; i++)
+		{
+			fileContent[i] = tmpFileContent[i];
+		}
+		fileContent[index] = '\0';	// Terminate string with null character
+
+		free(tmpFileContent);
+	}
+	else
+	{
+		*len = -1;
+		return NULL;
+	}
+	*len = index - 1;
+	return fileContent;
+}
+
+int clInit(
+	cl_context* clContext,
+	cl_command_queue* clCommandQueue,
+	cl_uint deviceIndex,
+	char*** deviceNameList,
+	cl_uint* numDevicesInList
+	)
+{
+	cl_uint numPlatforms;	// Number of platforms
+	cl_uint platformIDSize = sizeof(cl_platform_id);
+
+	cl_uint j;
+	cl_int err;
+
+	_selectedDeviceIndex = deviceIndex;	// OpenCL device index in the device list
+										//_selectedPlatformIndex = 0;
+	_windowType = 0;					// Default to no window - but can be set during call to pre-processing kernel
+										//
+										// Get the number of platforms
+										//
+	err = clGetPlatformIDs(NULL, NULL, &numPlatforms);
+	if (err != CL_SUCCESS) return err;
+	//
+	// Create an array to hold the platforms list
+	//
+	_platformIDs = (cl_platform_id*)malloc(sizeof(cl_platform_id) * numPlatforms);
+	err = clGetPlatformIDs(numPlatforms, _platformIDs, NULL);
+	if (err != CL_SUCCESS) return err;
+	///
+	// Assume that we can use the first platform in the list.  Most systems will have only one platform installed, i.e. NVIDIA
+	// although it's possible that the Intel SDK could also be installed.
+	//
+	if (numPlatforms < 1)
+		return -1;
+	//
+	// Get a list of the platform IDs associated with the first platform
+	//
+	err = clGetDeviceIDs(_platformIDs[SELECTED_PLATFORM], CL_DEVICE_TYPE_ALL, 0, NULL, &_numDevices);	// Get the number of devices
+	if (err < 0)
+		return err;
+	_deviceIDs = (cl_device_id*)malloc(_numDevices*sizeof(cl_device_id));	// Allocate an array for the devices
+	_deviceNameList = (char**)malloc(_numDevices * sizeof(char*));		// Allocate a list of pointers to device names
+	err = clGetDeviceIDs(_platformIDs[SELECTED_PLATFORM], CL_DEVICE_TYPE_ALL, _numDevices, _deviceIDs, NULL);	// Populate the array with the device IDs
+	if (err < 0)
+		return err;
+	//
+	// Create a list of the device names - mainly for debugging at the moment
+	//
+	for (j = 0; j<_numDevices; j++)
+	{
+
+		//infoRetSize = 1024;	// A large return size variable
+		_deviceNameList[j] = (char*)malloc(DEVICE_INFO_RETURN_SIZE);
+		err = clGetDeviceInfo(_deviceIDs[j], CL_DEVICE_NAME, DEVICE_INFO_RETURN_SIZE, _deviceNameList[j], NULL);
+		if (err < 0)
+			return err;
+
+
+	}
+	//
+	// Get the maximum local work group size
+	// using         //CL_DEVICE_MAX_WORK_GROUP_SIZE
+	//
+	err = clGetDeviceInfo(_deviceIDs[_selectedDeviceIndex], CL_DEVICE_MAX_WORK_GROUP_SIZE, sizeof(size_t), &_maxWorkGroupSize, NULL);
+	//printf()
+	if (err < 0)
+		return err;
+
+	//printf("\nMaximum local work group size: %i \n", _maxWorkGroupSize);
+	//
+	// Also return a reference to the name list to the user
+	//
+	*deviceNameList = _deviceNameList;
+	*numDevicesInList = _numDevices;
+	//
+	// Create a context for GPU execution - use the first platform for now
+	//
+	*clContext = clCreateContext(NULL, 1, &_deviceIDs[_selectedDeviceIndex], NULL, NULL, &err);
+	if (err < 0)
+		return err;
+	//
+	// Create a command queue on which to execute the OCT processing pipeline
+	//
+	*clCommandQueue = clCreateCommandQueue(*clContext, _deviceIDs[_selectedDeviceIndex], 0, &err);
+	if (err < 0)
+		return err;
+
+	return 0;
+}
+
+int clAlloc(
+	cl_context context,
+	cl_uint inputSpectraLength,		// Specify the actual length of input spectra
+	cl_uint outputAScanLength,		// Specify the length of output (outputLength >= inputLength).  If inputlength < outputlength then the input spectra will be zero padded
+	cl_uint numBScans,               // Number of B-Scans processed in one go
+	cl_uint numAScansPerBScan,
+	cl_uint ascanAveragingFactor,
+	cl_uint bscanAveragingFactor,
+	float* hostResamplingTable,		// Resampling table
+	float* hostInterpolationMatrix,		// Pre-computed interpolation matrix
+	float* hostReferenceSpectrum,	// Reference spectrum to be subtracted (or maybe divided!!) from each spectrum
+	float* hostReferenceAScan,		// A reference background A-Scan to be subtracted.. maybe log domain!!
+	unsigned int imageFormatStride
+	)
+{
+	//
+	// Try to allocate space on the GPU in global memory, this avoids repeating the allocation step for each DFT call
+	// Copy constant arrays, i.e. resampling table and spectral reference
+	//
+	cl_int err = 0;
+	cl_uint i;
+	//
+
+	//
+	// Copy values to global variables
+	//
+	_inputSpectrumLength = inputSpectraLength;
+	_outputAScanLength = outputAScanLength;
+	_outputImageHeight = _outputAScanLength / 2;
+	_numBScans = numBScans;
+	_numAScansPerBScan = numAScansPerBScan;
+	_ascanAveragingFactor = ascanAveragingFactor;
+	_bscanAveragingFactor = bscanAveragingFactor;
+	_imageFormatStride = imageFormatStride;
+	//
+	// Derived quantities used for allocating memory on the GPU
+	//
+	_totalAScansPerBScan = (size_t)numAScansPerBScan * (size_t)ascanAveragingFactor;
+	_totalBScans = (size_t)_numBScans * (size_t)_bscanAveragingFactor;
+	_totalAScans = _totalBScans * _totalAScansPerBScan;
+	_totalInputSpectraLength = _totalAScans * (size_t)_inputSpectrumLength;
+	_totalOutputAScanLength = _totalAScans * (size_t)_outputAScanLength;
+	_totalPreProcessedSpectraLength = _totalOutputAScanLength * (size_t)2;
+	_bitmapBScanSize = (size_t)_outputImageHeight * (size_t)_imageFormatStride;
+	_bitmapBScanVolumeSize = (size_t)_numBScans * (size_t)_bscanAveragingFactor * _bitmapBScanSize;
+
+	size_t corrSize = (size_t)(_numBScans + 1) * (size_t)_bscanAveragingFactor * _bitmapBScanSize;
+
+	//
+	_correlationUsesLogBScans = TRUE;       // default is for correlation mapping to use logarithmic bscans
+											//
+											// Create a buffer on the device for the input spectra to be copied to
+											//
+	deviceSpectra = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_ALLOC_HOST_PTR, sizeof(short) * _totalInputSpectraLength, NULL, &err);
+	if (err != CL_SUCCESS)
+		return err;
+
+	//BScanData for correlation
+	bScanCorrData = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_ALLOC_HOST_PTR,
+		sizeof(unsigned char) * corrSize, NULL, &err);
+	if (err != CL_SUCCESS)
+		return err;
+
+	//
+	// Copy the resampling table, reference spectrum and reference a-scan immediately (no need to call enqueuewritebuffer)
+	// using the CL_MEM_COPY_HOST_PTR flag
+	//
+	deviceResamplingTable = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(float) * (size_t)_inputSpectrumLength, hostResamplingTable, &err);
+	if (err != CL_SUCCESS)
+		return err;
+	deviceInterpolationMatrix = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(float) * (size_t)_inputSpectrumLength * (size_t)(INTERPOLATION_ORDER + 1) * (size_t)(INTERPOLATION_ORDER + 1), hostInterpolationMatrix, &err);
+	if (err != CL_SUCCESS)
+		return err;
+	deviceReferenceSpectrum = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(float) * (size_t)_inputSpectrumLength, hostReferenceSpectrum, &err);
+	if (err != CL_SUCCESS)
+		return err;
+	deviceReferenceAScan = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(float) * (size_t)_outputAScanLength, hostReferenceAScan, &err);
+	if (err != CL_SUCCESS)
+		return err;
+	//
+	// Allocate device memory for the outputs
+	//
+	// clFFT runs on an array of cl_mem objects, so we'll create the resampled spectra as such an array
+	//
+	devicePreProcessedSpectra = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(float) * _totalPreProcessedSpectraLength, NULL, &err);	// Complex interleaved pre-processed spectra
+	if (err != CL_SUCCESS)
+		return err;
+	//
+	// Likewise create an array of output buffers to hold the transform
+	//
+	deviceFourierTransform = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(float) * _totalPreProcessedSpectraLength, NULL, &err);	// Complex interleaved
+	if (err != CL_SUCCESS)
+		return err;
+
+	//
+	// Create buffers for each of the outputs
+	//
+	deviceEnvBScan = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(float)*_totalOutputAScanLength, NULL, &err);	// Envelope of the fft
+	if (err != CL_SUCCESS)
+		return err;
+	deviceLogEnvBScan = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(float)*_totalOutputAScanLength, NULL, &err);	// Logarithmic Envelope of the fft
+	if (err != CL_SUCCESS)
+		return err;
+	deviceCorrelationMap = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(float)*_totalOutputAScanLength, NULL, &err);	// Correlation map
+	if (err != CL_SUCCESS)
+		return err;
+	deviceSum = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(float) * _totalAScans, NULL, &err);	// Sum along each a-scan
+	if (err != CL_SUCCESS)
+		return err;
+	deviceSAM = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(float) * _totalAScans, NULL, &err);	// attenuation measured along each a-scan
+	if (err != CL_SUCCESS)
+		return err;
+	deviceAttenuationDepth = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(float) * _totalAScans, NULL, &err);	// attenuation depth along each a-scan
+	if (err != CL_SUCCESS)
+		return err;
+	deviceBScanBmp = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(unsigned char) * _bitmapBScanVolumeSize, NULL, &err);	// BScan bitmap images
+	if (err != CL_SUCCESS)
+		return err;
+
+	return err;
+}
+
+int clOCTCompileKernels(char* sourceFile, char* build_log,
+	size_t* buildLogLength)
+{
+	//
+	// Compile the Kernels used by the OCT processing pipeline
+	//
+	//	char* sourceFile = "C:\\Users\\oct\\Google Drive\\OCT Control Software - octView\\clOCTKernels\\current\\octKernels.cl\0";//
+	//	char* sourceFile = "/Users/phtomlins/Google Drive/OCT Control Software - octView/clOCTKernels/20140520/octKernels.cl\0";
+	//char* build_log;
+	size_t log_size;
+	unsigned int i;
+
+	unsigned int sourceLength;
+	cl_int err = 0;
+
+
+	char* kernelSource = clOCTLoadKernelSourceFromFile(sourceFile, &sourceLength);
+
+
+
+	//		return err;		//DEBUGGING!!
+
+	if (sourceLength < 0)
+		return sourceLength;
+	//
+	// Use the openCL library to create a program from the source code
+	//
+	_clOCTProgram = clCreateProgramWithSource(_context, 1, (const char**)&kernelSource, NULL, &err);
+	if (err != CL_SUCCESS)
+		return err;
+
+	//
+	// Build the kernels that reside within the source
+	//
+	//err = clBuildProgram(_clOCTProgram, _numDevices, _deviceIDs, NULL, NULL, NULL); 
+	//   const char options[] = "-Werror -cl-std=CL1.1";
+	//    error = clBuildProgram(program, 1, &device, options, NULL, NULL);
+	err = clBuildProgram(_clOCTProgram, NUM_DEVICES_TO_BUILD_FOR, &_deviceIDs[_selectedDeviceIndex], _compilerOptions, NULL, NULL);
+	if (err != CL_SUCCESS)
+	{
+		//
+		// If there was an error, get the build log
+		//
+		clGetProgramBuildInfo(_clOCTProgram, _deviceIDs[_selectedDeviceIndex], CL_PROGRAM_BUILD_LOG, 0, NULL, &log_size);	// Get the size of the build log
+																															//build_log = (char*)malloc(sizeof(char)*log_size + 1);		// Allocate memory for the log
+		if (log_size > *buildLogLength)
+			build_log = "Insufficient space to store build log.\0";
+		else
+			clGetProgramBuildInfo(_clOCTProgram, _deviceIDs[_selectedDeviceIndex], CL_PROGRAM_BUILD_LOG, log_size, build_log, NULL);
+		//
+		// Terminate with null character
+		//
+		*buildLogLength = log_size;
+		build_log[log_size - 1] = '\0';
+		build_log[log_size] = '\0';
+		//
+		return err;
+	}
+	else
+	{
+		*buildLogLength = 0;
+		build_log[0] = '\0';
+		build_log[1] = '\0';
+	}
+	//
+	// Create specific kernels
+	//
+
+	_preProcessingKernel = clCreateKernel(_clOCTProgram, "octPreProcessingKernel", &err);
+	if (err != CL_SUCCESS)
+		return err;
+	_postProcessingKernel = clCreateKernel(_clOCTProgram, "octPostProcessingKernel", &err);
+	if (err != CL_SUCCESS)
+		return err;
+	corrKernel = clCreateKernel(_clOCTProgram, "corrKernel", &err);
+	if (err != CL_SUCCESS)
+		return err;
+	//	_imageKernel = clCreateKernel(_clOCTProgram, "octImageKernel", &err);
+	//	if (err != CL_SUCCESS)
+	//		return err;
+
+
+	//	free(kernelSource);
+
+	return 0;
+}
+//
+// Build a kernel from a source file
+//
+int clBuild(char* sourceFile, char* buildLog, size_t* buildLogLength)
+{
+	//
+	// Test code to check the expected output from openCL library functions
+	// Use this to check correct outputs in C# wrapper functions
+	//
+	//	cl_uint i;
+	size_t logLen = 0;
+	cl_uint j;
+	size_t infoRetSize;
+	cl_int err;
+	//
+	// Compile the kernels
+	//
+	if (buildLog == NULL)
+	{
+		logLen = 1000000;
+		buildLogLength = &logLen;
+		buildLog = (char*)malloc(sizeof(char) * logLen);
+	}
+	//printf("Comiling kernels...");
+
+	err = clOCTCompileKernels(sourceFile, buildLog, buildLogLength);
+	//
+	// Clear up internally allocated memory
+	//
+	if (logLen > 0)
+		free(buildLog);
+
+
+
+	return err;
+}
+
+int SetPreProcessingKernelParameters()
+{
+	/*
+	__kernel void octPreProcessingKernel(
+	0 __global const short* spectra,					// Input arrays - raw spectra
+	1 __global const float* resamplingTable,			// resampling table
+	2 __global const float* interpolationMatrix,
+	3 __global const float* referenceSpectrum,		// reference spectrum for deconvolution
+	4 const cl_uint inputSpectraLength,
+	5 const cl_uint outputAScanLength,
+	6 const cl_uint numBScans,
+	7 const cl_uint numAScansPerBScan,
+	8 const cl_uint ascanAveragingFactor,
+	9 const cl_uint bscanAveragingFactor,
+	10 const cl_uint windowType,
+	11 __global float* preProcessedCmplxSpectra				// Output is the pre-processed spectra, ready for FFT
+	)
+	*/
+	cl_int err = 0;
+	err = clSetKernelArg(_preProcessingKernel, 0, sizeof(cl_mem), &deviceSpectra);
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(_preProcessingKernel, 1, sizeof(cl_mem), &deviceResamplingTable);
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(_preProcessingKernel, 2, sizeof(cl_mem), &deviceInterpolationMatrix);
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(_preProcessingKernel, 3, sizeof(cl_mem), &deviceReferenceSpectrum);
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(_preProcessingKernel, 4, sizeof(cl_uint), &_inputSpectrumLength);
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(_preProcessingKernel, 5, sizeof(cl_uint), &_outputAScanLength);
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(_preProcessingKernel, 6, sizeof(cl_uint), &_numBScans);
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(_preProcessingKernel, 7, sizeof(cl_uint), &_numAScansPerBScan);
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(_preProcessingKernel, 8, sizeof(cl_uint), &_ascanAveragingFactor);
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(_preProcessingKernel, 9, sizeof(cl_uint), &_bscanAveragingFactor);
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(_preProcessingKernel, 10, sizeof(cl_uint), &_windowType);
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(_preProcessingKernel, 11, sizeof(cl_mem), &devicePreProcessedSpectra);	// real part
+	if (err != CL_SUCCESS) return err;
+	//err = clSetKernelArg(_preProcessingKernel, 11, sizeof(cl_mem), &devicePreProcessedSpectra[1]);	// imaginary part
+	//if (err != CL_SUCCESS) return err;
+
+	return err;
+
+
+}
+int SetPostProcessingKernelParameters()
+{
+	/*
+	__kernel void octPostProcessingKernel(
+	__global const float* FourierTransformCmplx,		// 0. Input, the Fourier transform of the pre-processed spectra
+	__global const float* referenceAScan,				// 1. Reference a-scan subtracted from envelope of FT
+	const unsigned int outputAScanLength,				// 2. Length of the 1D Fourier transform
+	const unsigned int numBScans,						// 3. Number of BScans loaded into memory
+	const unsigned int numAScansPerBScan,               // 4. Number of A-Scans per BScan
+	const unsigned int ascanAveragingFactor,            // 5. AScan averaging factor
+	const unsigned int bscanAveragingFactor,            // 6. BScan Averaging factor
+	const unsigned int bscanBmpFormatStride,            // 7. Bitmap image row length for bscans
+	const float minVal,                                 // 8. Minimum image value for bitmaps
+	const float maxVal,                                 // 9. Maximum image value for bitmaps
+	__global float* envBScan,							// 10. Envelope of the bscan
+	__global float* logEnvBScan,						// 11. Log of envelope
+	__global float* Sum,                                // 12. Integral along a-scan
+	__global float* SAM,                                // 13. SAM image produced by measuring slope (not implemented yet)
+	__global float* AttenuationDepth,                   // 14. Attenuation depth measurement (not yet implemented)
+	__global char* bscanBmp                             // 15. BScan Bitmap Array
+	)	*/
+	cl_int err = 0;
+	err = clSetKernelArg(_postProcessingKernel, 0, sizeof(cl_mem), &deviceFourierTransform);
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(_postProcessingKernel, 1, sizeof(cl_mem), &deviceReferenceAScan);
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(_postProcessingKernel, 2, sizeof(cl_uint), &_outputAScanLength);
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(_postProcessingKernel, 3, sizeof(cl_uint), &_numBScans);
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(_postProcessingKernel, 4, sizeof(cl_uint), &_numAScansPerBScan);
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(_postProcessingKernel, 5, sizeof(cl_uint), &_ascanAveragingFactor);
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(_postProcessingKernel, 6, sizeof(cl_uint), &_bscanAveragingFactor);
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(_postProcessingKernel, 7, sizeof(cl_uint), &_imageFormatStride);	// Envelope of BScan
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(_postProcessingKernel, 10, sizeof(cl_mem), &deviceEnvBScan);	// Envelope of BScan
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(_postProcessingKernel, 11, sizeof(cl_mem), &deviceLogEnvBScan);	// Log envelope - usually used for B-Scan images
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(_postProcessingKernel, 12, sizeof(cl_mem), &deviceSum);	// Log envelope - usually used for B-Scan images
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(_postProcessingKernel, 13, sizeof(cl_mem), &deviceSAM);	// Log envelope - usually used for B-Scan images
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(_postProcessingKernel, 14, sizeof(cl_mem), &deviceAttenuationDepth);	// Log envelope - usually used for B-Scan images
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(_postProcessingKernel, 15, sizeof(cl_mem), &deviceBScanBmp);	// Log envelope - usually used for B-Scan images
+	if (err != CL_SUCCESS) return err;
+
+	return err;
+}
+int SetCorrelationParameters()
+{
+	cl_int err = 0;
+	err = clSetKernelArg(corrKernel, 0, sizeof(cl_mem), &bScanCorrData);
+	if (err != CL_SUCCESS) return err;
+	size_t totalBScans = _numBScans;
+	err = clSetKernelArg(corrKernel, 1, sizeof(cl_uint), &totalBScans);
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(corrKernel, 2, sizeof(cl_mem), &deviceCorrelationMap);
+	if (err != CL_SUCCESS) return err;
+
+	return err;
+}
+
+void PreComputeInterpolationCoefficients(float* resamplingTable, float* coefs,
+	int ResamplingTableLength)
 {
 	//
 	// Use a quadratic interpolation
@@ -364,270 +962,964 @@ void PreComputeInterpolationCoefficients(std::vector<float> &resamplingTable, st
 			coefs[offset + 6] = 1.0f / ((x1 - x2)*(x1 - x3));
 			coefs[offset + 7] = -1.0f / ((x1 - x2)*(x2 - x3));
 			coefs[offset + 8] = 1.0f / ((x1 - x3)*(x2 - x3));
+
+			/*			if (
+			_isnan(coefs[offset]) || !_finite(coefs[offset]) ||
+			_isnan(coefs[offset+1]) || !_finite(coefs[offset+1]) ||
+			_isnan(coefs[offset+2]) || !_finite(coefs[offset+2]) ||
+			_isnan(coefs[offset+3]) || !_finite(coefs[offset+3]) ||
+			_isnan(coefs[offset+4]) || !_finite(coefs[offset+4]) ||
+			_isnan(coefs[offset+5]) || !_finite(coefs[offset+5]) ||
+			_isnan(coefs[offset+6]) || !_finite(coefs[offset+6]) ||
+			_isnan(coefs[offset+7]) || !_finite(coefs[offset+7]) ||
+			_isnan(coefs[offset+8]) || !_finite(coefs[offset+8])
+			)
+			{
+			printf("------------------------------------------------\r\n");
+			printf("| %f\t%f\t%f |\r\n",coefs[offset],coefs[offset+1],coefs[offset+2]);
+			printf("| %f\t%f\t%f |\r\n",coefs[offset+3],coefs[offset+4],coefs[offset+5]);
+			printf("| %f\t%f\t%f |\r\n",coefs[offset+6],coefs[offset+7],coefs[offset+8]);
+			printf("------------------------------------------------\r\n");
+
+			}
+			*/
 		}
+		/*
+		printf("------------------------------------------------\r\n");
+		printf("| %f\t%f\t%f |\r\n",coefs[offset],coefs[offset+1],coefs[offset+2]);
+		printf("| %f\t%f\t%f |\r\n",coefs[offset+3],coefs[offset+4],coefs[offset+5]);
+		printf("| %f\t%f\t%f |\r\n",coefs[offset+6],coefs[offset+7],coefs[offset+8]);
+		printf("------------------------------------------------\r\n");
+		*/
 	}
 }
 
-void EngineOCT::OpenCLCompute()
-{
-	cl_platform_id platform_id = NULL;
-	cl_device_id device_id = NULL;
-	cl_context context = NULL;
-	cl_command_queue command_queue = NULL;
-	cl_mem Amobj = NULL;
-	cl_mem Bmobj = NULL;
-	cl_mem Cmobj = NULL;
-	cl_program program = NULL;
-	cl_kernel kernel = NULL;
-	cl_uint ret_num_devices;
-	cl_uint ret_num_platforms;
-	cl_int ret;
+int clOCTInit(cl_uint clDeviceIndex,			// Index in the device list of the OpenCL capable device to use
+	cl_uint inputSpectraLength,
+	cl_uint outputAScanLength,
+	cl_uint numBScans,
+	cl_uint numAScansPerBScan,
+	cl_uint ascanAveragingFactor,
+	cl_uint bscanAveragingFactor,
+	float* hostResamplingTable,		// Resampling table
+	float* hostReferenceSpectrum,	// Reference spectrum to be subtracted (or maybe divided!!) from each spectrum
+	float* hostReferenceAScan,		// A reference background A-Scan to be subtracted.. maybe log domain!!
+	char* kernelPath,
+	char* clBuildLog,
+	size_t* clBuildLogLength,
+	unsigned int imageFormatStride,
+	size_t preProcessingkernelWorkgroupSize,
+	size_t postProcessingkernelWorkgroupSize,
+	char* compilerOptions) {
 
-	//Proccessing Parameters
-	cl_uint inputSpectraLength = ResamplingTableData.size();
-	cl_uint outputAScanLength = ReferenceAScanData.size();
-	cl_uint bScanCount = 50;
-	cl_uint aScanBScanRatio = 500;
-	cl_uint aScanAveragingFactor = 1;
-	cl_uint bScanAveragingFactor = 1;
-	unsigned int outputImageHeight;// = outputLen/2;
+	clfftStatus status;
+	int clErr;
+	size_t strideX;
+	size_t dist;
+	//size_t batchSize;
+	char** deviceList;
+	cl_uint numDevicesInList;
+	//int i;
 
-	unsigned int totalBScans = 100;
-	unsigned int numBScansPerBatch = 50;
-	unsigned int numBScanProccesingIterations = (unsigned int)floor(totalBScans / bScanCount);
-	unsigned int numAScans = 500;
-
-	size_t localWorkSize = 2;
-	size_t totalBScanSize;
-	size_t totalBScanVolumeSize;
-	size_t fftLength = size_t(outputAScanLength);
-	size_t tempBufferSize;
-	cl_mem deviceTemporaryBuffer;
-
-
-	cl_uint numAScansPerBScan;
-	cl_uint totalAScans; // = numAScans * numBScans * ascanAve * bscanAve;
-	cl_uint totalInputLen; // = inputLen * totalAScans;
-	cl_uint totalOutputLen; // = outputLen * totalAScans;
-	cl_uint totalBatchLength;    // Number of array elements in a batch of bscans
-	cl_uint stride = 1500; //= 3*numAScans*ascanAve;
-
-	cl_uint windowType = 0;
-	cl_uint imageFormatStride = stride;
-
-	char string[MEM_SIZE];
-
-	numAScansPerBScan = aScanBScanRatio * aScanAveragingFactor * bScanAveragingFactor;
-	totalAScans = bScanCount * numAScansPerBScan;
-	totalInputLen = inputSpectraLength * totalAScans;
-	totalOutputLen = outputAScanLength * totalAScans;
-
-	outputImageHeight = outputAScanLength / 2;
-
-	numAScansPerBScan = numAScans * aScanAveragingFactor * bScanAveragingFactor;
-	totalAScans = numBScansPerBatch * numAScansPerBScan;
-	totalInputLen = inputSpectraLength * totalAScans;
-	totalOutputLen = outputAScanLength * totalAScans;
-
-	totalBScanSize = (size_t)stride * (size_t)outputImageHeight;
-
-	//resampTable = (float*)malloc(sizeof(float) * inputLen);
-	//refSpec = (float*)malloc(sizeof(float) * inputLen);
-	//refAScan = (float*)malloc(sizeof(float) * inputLen);
-	//inputSpectra = (short*)malloc(sizeof(short) * totalInputLen);
-	//buildLog = (char*)malloc(sizeof(char) * loglen);
-
-	totalBScanVolumeSize = totalBScanSize * (size_t)totalBScans;
-
-	FILE *fp;
-	char fileName[] = "./test.cl";
-	char *source_str;
-	size_t source_size;
-
-	/* Load the source code containing the kernel*/
-	fp = fopen(fileName, "r");
-	if (!fp) {
-		fprintf(stderr, "Failed to load kernel.\n");
-		exit(1);
+	//
+	// Debugging output
+	//
+	/*
+	printf("\n");
+	printf("Resampe Table, Ref. Spectrum, Ref. AScan\n");
+	for (i=0; i<10; i++)
+	{
+	printf("%f8,  %f8,  %f8\n",hostResamplingTable[i],hostReferenceSpectrum[i],hostReferenceAScan[i]);
 	}
-	source_str = (char*)malloc(MAX_SOURCE_SIZE);
-	source_size = fread(source_str, 1, MAX_SOURCE_SIZE, fp);
-	fclose(fp);
+	*/
+	//
+	// Set global variable values
+	//
+	_kernelPath = kernelPath;//"C:\\Users\\oct\\Google Drive\\OCT Control Software - octView\\clOCTKernels\\current\\octProcessingKernels2.cl\0";
+	_fftLength = (size_t)outputAScanLength;	// Global FFT length for clFFT to expect
+	_numCommandQueues = 1;
 
-	/* Get Platform and Device Info */
-	cl_uint platformIdCount = 0;
-	clGetPlatformIDs(0, nullptr, &platformIdCount);
+	_preProcessKernelWorkGroupSize = preProcessingkernelWorkgroupSize;
+	_postProcessKernelWorkGroupSize = postProcessingkernelWorkgroupSize;
+	_compilerOptions = compilerOptions;
 
-	std::vector<cl_platform_id> platformIds(platformIdCount);
-	clGetPlatformIDs(platformIdCount, platformIds.data(), nullptr);
+	strideX = 1;
+	dist = _fftLength;
+	//batchSize = numBScans*numAScansPerBScan*ascanAveragingFactor*bscanAveragingFactor;  // total number of ascans passed to GPU
+	//
+	//
+	// Initalise the GPU
+	//
+	clErr = clInit(&_context, &_commandQueue, clDeviceIndex, &deviceList, &numDevicesInList);
+	if (clErr != CL_SUCCESS) return(clErr);
 
-	ret = clGetDeviceIDs(platformIds[2], CL_DEVICE_TYPE_DEFAULT, 1, &device_id, &ret_num_devices);
+	printf("\nCL Selected Device: ");
+	printf(deviceList[clDeviceIndex]);
+	printf("\n");
+	//
+	// Pre-compute the interpolation coefficients
+	//
+	_interpolationMatrix = (float*)malloc(sizeof(float) * (size_t)inputSpectraLength * (INTERPOLATION_ORDER + 1) * (INTERPOLATION_ORDER + 1));
+	PreComputeInterpolationCoefficients(hostResamplingTable, _interpolationMatrix, (int)inputSpectraLength);
+	//
+	//
+	// Allocate memory on the GPU device
+	//
+	clErr = clAlloc(
+		_context,
+		inputSpectraLength,		// Specify the actual length of input spectra
+		outputAScanLength,		// Specify the length of output (outputLength >= inputLength).  If inputlength < outputlength then the input spectra will be zero padded
+		numBScans,
+		numAScansPerBScan,
+		ascanAveragingFactor,
+		bscanAveragingFactor,
+		hostResamplingTable,		// Resampling table
+		_interpolationMatrix,
+		hostReferenceSpectrum,	// Reference spectrum to be subtracted (or maybe divided!!) from each spectrum
+		hostReferenceAScan,		// A reference background A-Scan to be subtracted.. maybe log domain!!
+		imageFormatStride
+		);
+	if (clErr != CL_SUCCESS) return(clErr);
+	//
+	// Build the OpenCL kernels
+	//
+	clErr = clBuild(_kernelPath, clBuildLog, clBuildLogLength);
+	if (clErr != CL_SUCCESS) return clErr;
+	//
+	// Set the pre- and post- processing kernel parameters
+	//
+	clErr = SetPreProcessingKernelParameters();
+	if (clErr != CL_SUCCESS) return clErr;
+	clErr = SetPostProcessingKernelParameters();
+	if (clErr != CL_SUCCESS) return clErr;
+	clErr = SetCorrelationParameters();
+	if (clErr != CL_SUCCESS) return clErr;
+	//clErr = SetImageKernelParameters();
+	//if (clErr != CL_SUCCESS) return clErr;
+	//
+	// Determine the preferred workgroup size for each kernel
+	// using CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE
+	/*
+	clErr = clGetKernelWorkGroupInfo (_preProcessingKernel,
+	_deviceIDs[_selectedDeviceIndex],
+	CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE,
+	sizeof(size_t),
+	&_preProcessKernelWorkGroupSize,
+	NULL);
+	*/
+	//printf("\nPreferred preProcessing work group size: %i\n", _preProcessKernelWorkGroupSize);
+	//
+	//
+	// Configure the setup data
+	//
+	// NOTE:  clfftInitSetupData is defined __inline in the clFFT source
+	// This breaks gcc when compiled via xcode
+	// Update clfft.h to declare
+	// static __inline
+	//	static __inline clfftStatus clfftInitSetupData( clfftSetupData* setupData )
+	//
+	status = clfftInitSetupData(&_clfftSetupData);
+	if (status != CLFFT_SUCCESS)
+		return((int)status);
 
-	//Device settings
-	char* value;
-	size_t valueSize;
-	clGetDeviceInfo(device_id, CL_DEVICE_NAME, 0, NULL, &valueSize);
-	value = (char*)malloc(valueSize);
-	clGetDeviceInfo(device_id, CL_DEVICE_NAME, valueSize, value, NULL);
-	printf("Selected OpenCL Device: %s\n",  value);
-	free(value);
+	//
+	// Setup clFFT
+	//
+	status = clfftSetup(&_clfftSetupData);
+	if (status != CLFFT_SUCCESS)
+		return((int)status);
 
-	/* Create OpenCL context */
-	context = clCreateContext(NULL, 1, &device_id, NULL, NULL, &ret);
+	//
+	// Create an FFT plan using the CL context that was initialised earlier
+	//
+	status = clfftCreateDefaultPlan(&_clfftPlanHandle, _context, CLFFT_1D, &_fftLength);
+	if (status != CLFFT_SUCCESS)
+		return((int)status);
+	//
+	// Set the plan parameters (see example at http://dournac.org/info/fft_gpu)
+	//
+	status = clfftSetResultLocation(_clfftPlanHandle, CLFFT_OUTOFPLACE);
+	status = clfftSetLayout(_clfftPlanHandle, CLFFT_COMPLEX_INTERLEAVED, CLFFT_COMPLEX_INTERLEAVED);	// Currently complex to complex transform... 
+	status = clfftSetPlanBatchSize(_clfftPlanHandle, _totalAScans);
+	status = clfftSetPlanPrecision(_clfftPlanHandle, CLFFT_SINGLE);
 
-	/* Create Command Queue */
-	command_queue = clCreateCommandQueue(context, device_id, 0, &ret);
+	//status = clfftSetPlanInStride(_clfftPlanHandle, CLFFT_1D, &strideX);
+	//status = clfftSetPlanOutStride(_clfftPlanHandle, CLFFT_1D, &strideX);
+	//status = clfftSetPlanDistance(_clfftPlanHandle, _fftLength, _fftLength);
+	//
+	// Finalise the plan (apparently we can specify it a bit more... will look into this later)
+	//
+	status = clfftBakePlan(_clfftPlanHandle, _numCommandQueues, &_commandQueue, NULL, NULL);
+	if (status != CLFFT_SUCCESS)
+		return((int)status);
+	//
+	// Create a temporary buffer for the plan
+	//
+	status = clfftGetTmpBufSize(_clfftPlanHandle, &_tempBufferSize);
+	if (status != CLFFT_SUCCESS) return status;
 
-	//Calcaulate interpolation coefficients
-	std::vector<float> interpolationMatrix(sizeof(float) * (size_t)inputSpectraLength * (INTERPOLATION_ORDER + 1) * (INTERPOLATION_ORDER + 1));
-	PreComputeInterpolationCoefficients(ResamplingTableData, interpolationMatrix, inputSpectraLength);
+	if (_tempBufferSize > 0)
+	{
+		_deviceTemporaryBuffer = clCreateBuffer(_context, CL_MEM_READ_WRITE, _tempBufferSize, 0, &clErr);
+		if (clErr != CL_SUCCESS) return clErr;
+	}
 
-	//Allocate GPU Memory
+	return 0;
+}
+
+int PreProcess(short* hostSpectra, int windowType)
+{
+	//int i;
+	cl_int err;
+	size_t numWorkItemsPerGroup = _preProcessKernelWorkGroupSize;
+	//    size_t numWorkGroups;
+	size_t totalWorkItems = (size_t)_totalAScans;
+	size_t spectraSize = _totalInputSpectraLength * sizeof(short);
+
+	//    numWorkGroups = (size_t)ceil((double)totalWorkItems / (double)numWorkItemsPerGroup);
+	//
+	_windowType = windowType;	// Set the window type before calling the kernel...
+								//
+								// Update the windowtype in the kernel argument
+								//
+	err = clSetKernelArg(_preProcessingKernel, 10, sizeof(unsigned int), &_windowType);
+	if (err != CL_SUCCESS) return err;
+
+	//
+	// Copy the raw spectra from the host to the device
+	//
+	err = clEnqueueWriteBuffer(_commandQueue,
+		deviceSpectra,
+		CL_FALSE,
+		0,
+		spectraSize,
+		hostSpectra,
+		0,
+		NULL,
+		NULL);
+	if (err != CL_SUCCESS)
+		return err;
+
+	//
+	// Enqueue the pre processing kernel on the device
+	//
+	err = clEnqueueNDRangeKernel(_commandQueue, _preProcessingKernel, 1, NULL, &totalWorkItems, &numWorkItemsPerGroup, 0, NULL, NULL);
+	if (err != CL_SUCCESS)
+		return err;
+
+	return 0;
+}
+
+int ComputeCorrelation(int batchNum, int batchSize)
+{
+	bool saveBMP = true;
+	cl_int err;
+	size_t numWorkItemsPerGroup = 1;
+	//    size_t numWorkGroups;
+	size_t totalWorkItems = 500 * 512;
+
+	err = clEnqueueNDRangeKernel(_commandQueue, corrKernel, 1, NULL, &totalWorkItems, &numWorkItemsPerGroup, 0, NULL, NULL);
+	if (err != CL_SUCCESS)
+		return err;
+
+	float* correlationMap;
+	correlationMap = (float*)malloc(sizeof(float) * 25600000);
+
+	err = clEnqueueReadBuffer(_commandQueue, deviceCorrelationMap, CL_TRUE, 0, sizeof(float)*_totalAScans * _outputAScanLength, correlationMap, 0, NULL, NULL);
+	if (err != CL_SUCCESS) return err;
+
+	std::vector<float> results(correlationMap, correlationMap + (totalWorkItems*batchSize));
+
+	if (!saveBMP) {
+		for (int bitMapNum = 0; bitMapNum < batchSize - 1; bitMapNum++)
+		{
+
+			std::vector<std::vector<float>> corrCoeff;
+			for (int row = 0; row < 511; row++)
+			{
+				std::vector<float> rowData00;
+
+				for (int col = 0; col < 499; col += 1)
+				{
+					rowData00.push_back(results[col + (500 * row) +
+						(bitMapNum * totalWorkItems)]);
+				}
+				corrCoeff.push_back(rowData00);
+			}
+
+
+			int w = 499;
+			int h = 511;
+
+			FILE *f = nullptr;
+			if (f)
+				free(f);
+
+			unsigned char *img = NULL;
+			int filesize = 54 + 3 * w*h;  //w is your image width, h is image height, both int
+			if (img)
+				free(img);
+			img = (unsigned char *)malloc(3 * w*h);
+			memset(img, 0, sizeof(img));
+
+			for (int xCor = 0; xCor < w; xCor++)
+			{
+				for (int yCor = 0; yCor < h; yCor++)
+				{
+					int x = xCor;
+					int y = (h - 1) - yCor;
+					int r = corrCoeff[yCor][xCor];
+					int g = corrCoeff[yCor][xCor];
+					int b = corrCoeff[yCor][xCor];
+					if (r > 255) r = 255;
+					if (g > 255) g = 255;
+					if (b > 255) b = 255;
+					img[(x + y*w) * 3 + 2] = (unsigned char)(r);
+					img[(x + y*w) * 3 + 1] = (unsigned char)(g);
+					img[(x + y*w) * 3 + 0] = (unsigned char)(b);
+				}
+			}
+
+			unsigned char bmpfileheader[14] = { 'B','M', 0,0,0,0, 0,0, 0,0, 54,0,0,0 };
+			unsigned char bmpinfoheader[40] = { 40,0,0,0, 0,0,0,0, 0,0,0,0, 1,0, 24,0 };
+			unsigned char bmppad[3] = { 0,0,0 };
+
+			bmpfileheader[2] = (unsigned char)(filesize);
+			bmpfileheader[3] = (unsigned char)(filesize >> 8);
+			bmpfileheader[4] = (unsigned char)(filesize >> 16);
+			bmpfileheader[5] = (unsigned char)(filesize >> 24);
+
+			bmpinfoheader[4] = (unsigned char)(w);
+			bmpinfoheader[5] = (unsigned char)(w >> 8);
+			bmpinfoheader[6] = (unsigned char)(w >> 16);
+			bmpinfoheader[7] = (unsigned char)(w >> 24);
+			bmpinfoheader[8] = (unsigned char)(h);
+			bmpinfoheader[9] = (unsigned char)(h >> 8);
+			bmpinfoheader[10] = (unsigned char)(h >> 16);
+			bmpinfoheader[11] = (unsigned char)(h >> 24);
+
+
+			std::string str = "./results/cResult" +
+				std::to_string(bitMapNum + (batchNum * 1000))
+				+ ".bmp";
+			const char* gfgfg = str.c_str();
+
+			f = fopen(gfgfg, "wb");
+			fwrite(bmpfileheader, 1, 14, f);
+			fwrite(bmpinfoheader, 1, 40, f);
+			for (int imgIndex = 0; imgIndex < h; imgIndex++)
+			{
+				fwrite(img + (w*(imgIndex - 1) * 3), 3, w, f);
+				fwrite(bmppad, 1, (4 - (w * 3) % 4) % 4, f);
+			}
+
+			free(img);
+
+			fclose(f);
+		}
+	}
+
+	return 0;
+}
+
+int InverseTransform()
+{
+	clfftStatus status;
+	cl_int err;
+
+	//
+	// For debugging
+	//
+	//err = clEnqueueWriteBuffer(_commandQueue,
+	//							deviceSpectra,
+	//							CL_TRUE,
+	//							0,
+	//							sizeof(short) * _totalAScans * _inputSpectrumLength,
+	//							hostSpectra,
+	//							0,
+	//							NULL,
+	//							NULL);
+	//if (err != CL_SUCCESS)
+	//	return err;
+
+
+
+	status = clfftEnqueueTransform(_clfftPlanHandle, CLFFT_BACKWARD, _numCommandQueues, &_commandQueue, 0, NULL, NULL, &devicePreProcessedSpectra, &deviceFourierTransform, _deviceTemporaryBuffer);
+	if (status != CLFFT_SUCCESS)
+		return((int)status);
+
+
+	//err = clFinish(_commandQueue);	// Wait for the Transform to complete
+	//if (err != CL_SUCCESS) return err;
+
+	err = 0;
+	return err;
+}
+
+int PostProcess(float minVal, float maxVal)
+{
+	cl_int err;
+	size_t numWorkItemsPerGroup = _postProcessKernelWorkGroupSize;
+	size_t totalWorkItems = _totalAScans;
+	//
+	// Set the kernel min and max value parameters
+	//
+	err = clSetKernelArg(_postProcessingKernel, 8, sizeof(cl_float), &minVal);	// min threshold
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(_postProcessingKernel, 9, sizeof(cl_float), &maxVal);	// max threshold
+	if (err != CL_SUCCESS) return err;
+	//
+	// Enqueue the post processing kernel on the device - all of the required data, i.e. the FFT result, is already on the GPU - so nothing to copy
+	//
+	err = clEnqueueNDRangeKernel(_commandQueue, _postProcessingKernel, 1, NULL, &totalWorkItems, &numWorkItemsPerGroup, 0, NULL, NULL);
+	if (err != CL_SUCCESS)
+		return err;
+
+	//err = clFinish(_commandQueue);
+	//if (err != CL_SUCCESS)	return err;
+
+
+	return 0;
+
+
+}
+
+int Wait()
+{
 	cl_int err = 0;
-	cl_mem deviceSpectra;
+	err = clFinish(_commandQueue);
+	return err;
+}
+
+int CopyPreProcessedSpectraToHost(
+	float* preProcessedSpectra
+	)
+{
+	cl_int err;
+	//
+	// Don't block - use Wait function to wait for the buffer to finish copying
+	//
+	err = clEnqueueReadBuffer(_commandQueue, devicePreProcessedSpectra, CL_TRUE, 0, sizeof(float)*_totalAScans * _inputSpectrumLength * 2, preProcessedSpectra, 0, NULL, NULL);
+	if (err != CL_SUCCESS) return err;
+
+	return err;
+}
+
+int CopyComplexFourierTransformToHost(
+	float* cmplx
+	//	float* imagPart
+	)
+{
+	cl_int err;
+	//
+	// Don't block - use Wait function to wait for the buffer to finish copying
+	//
+	err = clEnqueueReadBuffer(_commandQueue, deviceFourierTransform, CL_TRUE, 0, sizeof(float)*_totalAScans * _outputAScanLength * 2, cmplx, 0, NULL, NULL);
+	if (err != CL_SUCCESS) return err;
+	//	err = clEnqueueReadBuffer(_commandQueue, deviceFourierTransform[1], CL_TRUE, 0, sizeof(float)*_totalAScans * _outputAScanLength, imagPart, 0, NULL, NULL);
+	//	if (err != CL_SUCCESS) return err;
+
+	return err;
+
+}
+
+int CopyLinearEnvelopeToHost(
+	float* linearEnvelope
+	)
+{
+	cl_int err;
+	/*
+	cl_mem devicePreProcessedSpectra[2];			// Resampled, windowed, etc, spectra
+	cl_mem deviceFourierTransform[2];
+	//cl_mem deviceRealBScan;
+	//cl_mem deviceImagBScan;
+	cl_mem deviceEnvBScan;
+	cl_mem deviceLogEnvBScan;
 	cl_mem deviceResamplingTable;
-	cl_mem deviceInterpolationMatrix;
 	cl_mem deviceReferenceSpectrum;
 	cl_mem deviceReferenceAScan;
-	
-	cl_mem devicePreProcessedSpectra;	
-	cl_mem deviceFourierTransform;
+	cl_mem deviceSum;
+	cl_mem deviceSAM;
+	cl_mem deviceAttenuationDepth;
 
+
+	*/
+	//
+	// Don't block - use Wait function to wait for the buffer to finish copying
+	//
+	err = clEnqueueReadBuffer(_commandQueue, deviceEnvBScan, CL_TRUE, 0, sizeof(float)*_totalAScans * _outputAScanLength, linearEnvelope, 0, NULL, NULL);
+	if (err != CL_SUCCESS) return err;
+
+	return err;
+
+}
+
+int CopyLogEnvelopeToHost(
+	float* logEnvelope
+	)
+{
+	cl_int err;
+	int i;
+	/*
+	cl_mem devicePreProcessedSpectra[2];			// Resampled, windowed, etc, spectra
+	cl_mem deviceFourierTransform[2];
+	//cl_mem deviceRealBScan;
+	//cl_mem deviceImagBScan;
 	cl_mem deviceEnvBScan;
 	cl_mem deviceLogEnvBScan;
 	cl_mem deviceSum;
 	cl_mem deviceSAM;
 	cl_mem deviceAttenuationDepth;
-	cl_mem deviceBScanBmp;
-
-	//Output Memory Buffers
-	size_t totalPreProcessedSpectraLength;
-	size_t totalOutputAScanLength;
-	size_t bitmapBScanVolumeSize;
-	size_t bitmapBScanSize;
-	size_t totalInputSpectraLength;
-
-	totalInputSpectraLength = totalAScans * (size_t)inputSpectraLength;
-	totalOutputAScanLength = totalAScans * (size_t)outputAScanLength;
-	totalPreProcessedSpectraLength = totalOutputAScanLength * (size_t)2;
-
-	outputImageHeight = outputAScanLength / 2;
-	bitmapBScanSize = (size_t)outputImageHeight * (size_t)imageFormatStride;
-	bitmapBScanVolumeSize = (size_t)bScanCount * (size_t)bScanAveragingFactor * bitmapBScanSize;
 
 
+	*/
 	//
-	FILE* inputSpecFile;
-	inputSpecFile = fopen("spectra.bin", "rb");
-	short* inputSpectra;
-	inputSpectra = (short*)malloc(sizeof(short) * totalInputLen);
+	// Don't block - use Wait function to wait for the buffer to finish copying
+	//
+	err = clEnqueueReadBuffer(_commandQueue, deviceLogEnvBScan, CL_TRUE, 0, sizeof(float)*_totalAScans * _outputAScanLength, logEnvelope, 0, NULL, NULL);
+	if (err != CL_SUCCESS) return err;
 
-	fseek(inputSpecFile, sizeof(short) * totalInputLen * 0, SEEK_SET);
-	fread(inputSpectra, sizeof(short), totalInputLen, inputSpecFile);
-
-	deviceSpectra = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_ALLOC_HOST_PTR,
-		sizeof(short) * totalInputSpectraLength, &inputSpectra, &err);
-	deviceResamplingTable = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_ALLOC_HOST_PTR,
-		sizeof(float) * ResamplingTableData.size(), &ResamplingTableData, &err);
-	deviceInterpolationMatrix = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_ALLOC_HOST_PTR,
-		sizeof(float) * interpolationMatrix.size(),&interpolationMatrix, &err);
-	deviceReferenceSpectrum = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_ALLOC_HOST_PTR,
-		sizeof(float) * ReferenceSpectrumData.size(), &ReferenceSpectrumData, &err);
-	deviceReferenceAScan = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_ALLOC_HOST_PTR,
-		sizeof(float) * ReferenceAScanData.size(), &ReferenceAScanData, &err);
-
-	devicePreProcessedSpectra = clCreateBuffer(context, CL_MEM_READ_WRITE, 
-		sizeof(float) * totalPreProcessedSpectraLength, NULL, &err);	// Complex interleaved pre-processed spectra
-	deviceFourierTransform = clCreateBuffer(context, CL_MEM_READ_WRITE, 
-		sizeof(float) * totalPreProcessedSpectraLength, NULL, &err);	// Complex interleaved
-	deviceEnvBScan = clCreateBuffer(context, CL_MEM_WRITE_ONLY, 
-		sizeof(float)*totalOutputAScanLength, NULL, &err);	// Envelope of the fft
-	deviceLogEnvBScan = clCreateBuffer(context, CL_MEM_WRITE_ONLY, 
-		sizeof(float)*totalOutputAScanLength, NULL, &err);	// Logarithmic Envelope of the fft
-	deviceSum = clCreateBuffer(context, CL_MEM_WRITE_ONLY, 
-		sizeof(float) * totalAScans, NULL, &err);	// Sum along each a-scan
-	deviceSAM = clCreateBuffer(context, CL_MEM_WRITE_ONLY,
-		sizeof(float) * totalAScans, NULL, &err);	// attenuation measured along each a-scan
-	deviceAttenuationDepth = clCreateBuffer(context, CL_MEM_WRITE_ONLY, 
-		sizeof(float) * totalAScans, NULL, &err);	// attenuation depth along each a-scan
-	deviceBScanBmp = clCreateBuffer(context, CL_MEM_WRITE_ONLY, 
-		sizeof(unsigned char) * bitmapBScanVolumeSize, NULL, &err);	// BScan bitmap images
-
-
-	//Build Kernels from source
-	program = clCreateProgramWithSource(context, 1, (const char **)&source_str, (const size_t *)&source_size, &err);
-	ret = clBuildProgram(program, 1, &device_id, NULL, NULL, NULL);
-
-	//Create each kernel
-	cl_kernel preProcessingKernel;
-	cl_kernel postProcessingKernel;
-
-
-
-	preProcessingKernel = clCreateKernel(program, "octPreProcessingKernel", &err);
-	postProcessingKernel = clCreateKernel(program, "octPostProcessingKernel", &err);
-
-	//Set Kernel Parameters
-	err = clSetKernelArg(preProcessingKernel, 0, sizeof(cl_mem), &deviceSpectra);
-	err = clSetKernelArg(preProcessingKernel, 1, sizeof(cl_mem), &deviceResamplingTable);
-	err = clSetKernelArg(preProcessingKernel, 2, sizeof(cl_mem), &deviceInterpolationMatrix);
-	err = clSetKernelArg(preProcessingKernel, 3, sizeof(cl_mem), &deviceReferenceSpectrum);
-	err = clSetKernelArg(preProcessingKernel, 4, sizeof(cl_uint), &inputSpectraLength);
-	err = clSetKernelArg(preProcessingKernel, 5, sizeof(cl_uint), &outputAScanLength);
-	err = clSetKernelArg(preProcessingKernel, 6, sizeof(cl_uint), &bScanCount);
-	err = clSetKernelArg(preProcessingKernel, 7, sizeof(cl_uint), &aScanBScanRatio);
-	err = clSetKernelArg(preProcessingKernel, 8, sizeof(cl_uint), &aScanAveragingFactor);
-	err = clSetKernelArg(preProcessingKernel, 9, sizeof(cl_uint), &bScanAveragingFactor);
-	err = clSetKernelArg(preProcessingKernel, 10, sizeof(cl_uint), &windowType);
-	err = clSetKernelArg(preProcessingKernel, 11, sizeof(cl_mem), &devicePreProcessedSpectra);	// real part
-
-	err = clSetKernelArg(postProcessingKernel, 0, sizeof(cl_mem), &deviceFourierTransform);
-	err = clSetKernelArg(postProcessingKernel, 1, sizeof(cl_mem), &deviceReferenceAScan);
-	err = clSetKernelArg(postProcessingKernel, 2, sizeof(cl_uint), &outputAScanLength);
-	err = clSetKernelArg(postProcessingKernel, 3, sizeof(cl_uint), &bScanCount);
-	err = clSetKernelArg(postProcessingKernel, 4, sizeof(cl_uint), &aScanBScanRatio);
-	err = clSetKernelArg(postProcessingKernel, 5, sizeof(cl_uint), &aScanAveragingFactor);
-	err = clSetKernelArg(postProcessingKernel, 6, sizeof(cl_uint), &bScanAveragingFactor);
-	err = clSetKernelArg(postProcessingKernel, 7, sizeof(cl_uint), &imageFormatStride);	// Envelope of BScan
-	err = clSetKernelArg(postProcessingKernel, 10, sizeof(cl_mem), &deviceEnvBScan);	// Envelope of BScan
-	err = clSetKernelArg(postProcessingKernel, 11, sizeof(cl_mem), &deviceLogEnvBScan);	// Log envelope - usually used for B-Scan images
-	err = clSetKernelArg(postProcessingKernel, 12, sizeof(cl_mem), &deviceSum);	// Log envelope - usually used for B-Scan images
-	err = clSetKernelArg(postProcessingKernel, 13, sizeof(cl_mem), &deviceSAM);	// Log envelope - usually used for B-Scan images
-	err = clSetKernelArg(postProcessingKernel, 14, sizeof(cl_mem), &deviceAttenuationDepth);	// Log envelope - usually used for B-Scan images
-	err = clSetKernelArg(postProcessingKernel, 15, sizeof(cl_mem), &deviceBScanBmp);	// Log envelope - usually used for B-Scan images
-	
-	float bmpMinVal = -155;    // Threshold values for storing log images as bitmaps
-	float bmpMaxVal = -55;
-
-
-	//CL FFT
-	clfftStatus status;
-	clfftSetupData clfftSetupData;
-	clfftPlanHandle clfftPlanHandle;
-
-	status = clfftInitSetupData(&clfftSetupData);
-	status = clfftSetup(&clfftSetupData);
-	status = clfftCreateDefaultPlan(&clfftPlanHandle, context, CLFFT_1D, &fftLength);
-
-	status = clfftSetResultLocation(clfftPlanHandle, CLFFT_OUTOFPLACE);
-	status = clfftSetLayout(clfftPlanHandle, CLFFT_COMPLEX_INTERLEAVED, CLFFT_COMPLEX_INTERLEAVED);	// Currently complex to complex transform... 
-	status = clfftSetPlanBatchSize(clfftPlanHandle, totalAScans);
-	status = clfftSetPlanPrecision(clfftPlanHandle, CLFFT_SINGLE);
-	status = clfftBakePlan(clfftPlanHandle, 1, &command_queue, NULL, NULL);
-	status = clfftGetTmpBufSize(clfftPlanHandle, &tempBufferSize);
-
-	if(tempBufferSize > 0)
+	//printf("\n");
+	//printf("Log Env.\n");
+	for (i = 0; i<10; i++)
 	{
-		deviceTemporaryBuffer = clCreateBuffer(context, CL_MEM_READ_WRITE, tempBufferSize, 0, NULL);
+		//printf("%f\n", logEnvelope[i]);
 	}
 
-	///////////////////// CL Init Done
-	size_t  maxWorkGroupSize;
-	size_t  preProcessKernelWorkGroupSize = localWorkSize;
-	size_t  postProcessKernelWorkGroupSize = localWorkSize;
+	return err;
+
+}
+
+int CopyCorrelationMapToHost(
+	float* correlationMap
+	)
+{
+	cl_int err;
+	/*
+	cl_mem devicePreProcessedSpectra[2];			// Resampled, windowed, etc, spectra
+	cl_mem deviceFourierTransform[2];
+	//cl_mem deviceRealBScan;
+	//cl_mem deviceImagBScan;
+	cl_mem deviceEnvBScan;
+	cl_mem deviceLogEnvBScan;
+	cl_mem deviceSum;
+	cl_mem deviceSAM;
+	cl_mem deviceAttenuationDepth;
 
 
-	//Output data
+	*/
+	//
+	// Don't block - use Wait function to wait for the buffer to finish copying
+	//
+	err = clEnqueueReadBuffer(_commandQueue, deviceCorrelationMap, CL_TRUE, 0, sizeof(float)*_totalAScans * _outputAScanLength, correlationMap, 0, NULL, NULL);
+	if (err != CL_SUCCESS) return err;
+
+	return err;
+
+}
+
+int CopySumToHost(
+	float* sum
+	)
+{
+	cl_int err;
+	/*
+	cl_mem devicePreProcessedSpectra[2];			// Resampled, windowed, etc, spectra
+	cl_mem deviceFourierTransform[2];
+	//cl_mem deviceRealBScan;
+	//cl_mem deviceImagBScan;
+	cl_mem deviceEnvBScan;
+	cl_mem deviceLogEnvBScan;
+	cl_mem deviceSum;
+	cl_mem deviceSAM;
+	cl_mem deviceAttenuationDepth;
+
+
+	*/
+	//
+	// Don't block - use Wait function to wait for the buffer to finish copying
+	//
+	err = clEnqueueReadBuffer(_commandQueue, deviceSum, CL_TRUE, 0, sizeof(float)*_totalAScans, sum, 0, NULL, NULL);
+	if (err != CL_SUCCESS) return err;
+
+	return err;
+
+}
+
+int CopySAMToHost(
+	float* sam
+	)
+{
+	cl_int err;
+	/*
+	cl_mem devicePreProcessedSpectra[2];			// Resampled, windowed, etc, spectra
+	cl_mem deviceFourierTransform[2];
+	//cl_mem deviceRealBScan;
+	//cl_mem deviceImagBScan;
+	cl_mem deviceEnvBScan;
+	cl_mem deviceLogEnvBScan;
+	cl_mem deviceSum;
+	cl_mem deviceSAM;
+	cl_mem deviceAttenuationDepth;
+
+
+	*/
+	//
+	// Don't block - use Wait function to wait for the buffer to finish copying
+	//
+	err = clEnqueueReadBuffer(_commandQueue, deviceSAM, CL_TRUE, 0, sizeof(float)*_totalAScans, sam, 0, NULL, NULL);
+	if (err != CL_SUCCESS) return err;
+
+	return err;
+
+}
+
+int CopyAttenuationDepthToHost(
+	float* attenuationDepth
+	)
+{
+	cl_int err;
+	/*
+	cl_mem devicePreProcessedSpectra[2];			// Resampled, windowed, etc, spectra
+	cl_mem deviceFourierTransform[2];
+	//cl_mem deviceRealBScan;
+	//cl_mem deviceImagBScan;
+	cl_mem deviceEnvBScan;
+	cl_mem deviceLogEnvBScan;
+	cl_mem deviceSum;
+	cl_mem deviceSAM;
+	cl_mem deviceAttenuationDepth;
+
+
+	*/
+	//
+	// Don't block - use Wait function to wait for the buffer to finish copying
+	//
+	err = clEnqueueReadBuffer(_commandQueue, deviceAttenuationDepth, CL_TRUE, 0, sizeof(float)*_totalAScans, attenuationDepth, 0, NULL, NULL);
+	if (err != CL_SUCCESS) return err;
+
+	return err;
+
+}
+
+
+//
+// Copy B-Scan Bitmaps back to the host
+//
+int CopyBScanBitmapsToHost(
+	unsigned char* bscanBmp
+	)
+{
+	cl_int err;
+	//
+	// Don't block - use Wait function to wait for the buffer to finish copying
+	//
+	err = clEnqueueReadBuffer(_commandQueue, deviceBScanBmp, CL_TRUE, 0, sizeof(unsigned char)*_bitmapBScanVolumeSize, bscanBmp, 0, NULL, NULL);
+	if (err != CL_SUCCESS) return err;
+
+	return err;
+
+}
+
+//
+// Copy a single B-Scan Bitmap back to the host
+//
+int CopyBScanBitmapToHost(
+	unsigned int bscanIndex,
+	unsigned char* bscanBmp
+	)
+{
+	cl_int err;
+	//
+	// Don't block - use Wait function to wait for the buffer to finish copying
+	//
+	err = clEnqueueReadBuffer(_commandQueue, deviceBScanBmp, CL_TRUE, (size_t)bscanIndex * sizeof(unsigned char)*_bitmapBScanSize, sizeof(unsigned char)*_bitmapBScanSize, bscanBmp, 0, NULL, NULL);
+	if (err != CL_SUCCESS) return err;
+
+	return err;
+
+}
+
+int CopyAllResultsToHost(
+	float* preProcessedSpectra,
+	float* cmplx,
+	//float* imagPart,
+	float* linearEnvelope,
+	float* logEnvelope,
+	float* sum,
+	float* sam,
+	float* attenuationDepth,
+	unsigned char* bscanBmp
+	)
+{
+	cl_int err;
+	err = CopyPreProcessedSpectraToHost(preProcessedSpectra);
+	if (err != CL_SUCCESS) return err;
+	err = CopyComplexFourierTransformToHost(cmplx);
+	if (err != CL_SUCCESS) return err;
+	err = CopyLinearEnvelopeToHost(linearEnvelope);
+	if (err != CL_SUCCESS) return err;
+	err = CopyLogEnvelopeToHost(logEnvelope);
+	if (err != CL_SUCCESS) return err;
+	err = CopySumToHost(sum);
+	if (err != CL_SUCCESS) return err;
+	err = CopySAMToHost(sam);
+	if (err != CL_SUCCESS) return err;
+	err = CopyAttenuationDepthToHost(attenuationDepth);
+	if (err != CL_SUCCESS) return err;
+	err = CopyBScanBitmapsToHost(bscanBmp);
+	if (err != CL_SUCCESS) return err;
+	//Wait();
+
+	return err;
+}
+
+int SaveBitmap(
+	char* path,
+	unsigned char* pixelArray,       // In bitmap format (including padding)
+	unsigned int width,
+	unsigned int height,
+	unsigned int pixelArraySize      // length of the above array
+	)
+{
+	//
+	// Save BScan to RGB 24bpp device independent bitmap
+	//
+	float bitmapFileSize;
+	unsigned int bpp = 24;
+	unsigned int bytesPerPixel = bpp / 8;
+	unsigned int headerLen = 14;    // 14 byte bitmap header
+	unsigned int dibHeaderLen = 12; // BITMAPCOREHEADER
+	unsigned int offset = headerLen + dibHeaderLen;
+	unsigned int planes = 1;
+
+	unsigned int bytePixel;
+	unsigned int i;
+	unsigned int ii;
+	FILE* fbmp;
+
+	bitmapFileSize = headerLen + dibHeaderLen + pixelArraySize;
+	//
+	// Write the source array to a device independent bitmap file
+	//
+	fbmp = fopen(path, "wb");
+	//
+	// Write a 14 byte header
+	//
+	//value="BM";
+	fwrite("BM", 1, 2, fbmp);
+	fwrite(&bitmapFileSize, 4, 1, fbmp);
+	fwrite("0", 1, 4, fbmp);   // Write 4 zero bytes to the reserved section
+	fwrite(&offset, 4, 1, fbmp); // Write the offset to the beginning of the image data
+								 //
+								 // Write DIB header
+								 //
+	fwrite(&dibHeaderLen, 4, 1, fbmp);
+	fwrite(&width, 2, 1, fbmp);
+	fwrite(&height, 2, 1, fbmp);
+	fwrite(&planes, 2, 1, fbmp);
+	fwrite(&bpp, 2, 1, fbmp);
+	//
+	// Write the pixel array
+	//
+	for (i = 0; i<pixelArraySize; i++)
+	{
+		ii = pixelArraySize - i - 1;
+		//printf("%hhu grd",pixelArray[ii]);
+		fwrite(&pixelArray[ii], 1, 1, fbmp);  // Red
+	}
+
+	fclose(fbmp);
+
+	return EXIT_SUCCESS;
+
+}
+
+int clRelease()
+{
+	cl_uint i;
+
+	// Release inputs
+	clReleaseMemObject(deviceSpectra);
+	clReleaseMemObject(deviceResamplingTable);
+	clReleaseMemObject(deviceInterpolationMatrix);
+	clReleaseMemObject(deviceReferenceSpectrum);
+	clReleaseMemObject(deviceReferenceAScan);
+	//
+	// Release outputs
+	//
+	//for (i=0; i<_totalAScans; i++)
+	//{
+	clReleaseMemObject(devicePreProcessedSpectra);
+	clReleaseMemObject(deviceFourierTransform);
+	//		clReleaseMemObject(devicePreProcessedSpectra[1]);
+	//		clReleaseMemObject(deviceFourierTransform[1]);
+	//}
+	//free(devicePreProcessedSpectra);
+	//free(deviceFourierTransform);
+
+	//clReleaseMemObject(deviceRealBScan);
+	//clReleaseMemObject(deviceImagBScan);
+	clReleaseMemObject(deviceEnvBScan);
+	clReleaseMemObject(deviceLogEnvBScan);
+	clReleaseMemObject(deviceCorrelationMap);
+	clReleaseMemObject(deviceSum);
+	clReleaseMemObject(deviceSAM);
+	clReleaseMemObject(deviceAttenuationDepth);
+	clReleaseMemObject(deviceBScanBmp);
+	//
+	// Release other resources
+	//
+	for (i = 0; i<_numDevices; i++)
+	{
+		free(_deviceNameList[i]);
+	}
+	//	clReleaseKernel(dftKernel);
+	////	clReleaseKernel(testKernel);
+	clReleaseKernel(_preProcessingKernel);
+	clReleaseKernel(_postProcessingKernel);
+	//clReleaseKernel(_imageKernel);
+	clReleaseKernel(corrKernel);
+
+	clReleaseProgram(_clOCTProgram);
+
+
+	clReleaseCommandQueue(_commandQueue);
+	clReleaseContext(_context);
+	//	
+	free(_deviceNameList);
+	free(_deviceIDs);
+	free(_platformIDs);
+
+
+	return 0;
+}
+
+int clOCTDispose()
+{
+	clfftStatus status;
+	//
+	// Destroy the plan
+	//
+	status = clfftDestroyPlan(&_clfftPlanHandle);
+
+	status = clfftTeardown();
+	if (status != CLFFT_SUCCESS)
+		return((int)status);
+	//
+	// Release the temporary buffer
+	//
+	clReleaseMemObject(_deviceTemporaryBuffer);
+	//
+	// Release the openCL mem objects
+	//
+	clRelease();
+	//
+	// Free the interpolation matrix
+	//
+	free(_interpolationMatrix);
+
+	return 0;
+}
+
+int CalculateCoeff(int i1p1, int i1p2, int i1p3, int i1p4, float i1Mean,
+	int i2p1, int i2p2, int i2p3, int i2p4, float i2Mean)
+{
+	int result = 0;
+
+	int numerator = 0;
+	int denominator00 = 0;
+	int denominator01 = 0;
+
+	float diffI1 = 0;
+	float diffI2 = 0;
+
+	diffI1 = i1p1 - i1Mean;
+	diffI2 = i2p1 - i2Mean;
+
+	numerator += diffI1 * diffI2;
+	denominator00 += diffI1 * diffI1;
+	denominator01 += diffI2 * diffI2;
+
+	diffI1 = i1p2 - i1Mean;
+	diffI2 = i2p2 - i2Mean;
+
+	numerator += diffI1 * diffI2;
+	denominator00 += diffI1 * diffI1;
+	denominator01 += diffI2 * diffI2;
+
+	diffI1 = i1p3 - i1Mean;
+	diffI2 = i2p3 - i2Mean;
+
+	numerator += diffI1 * diffI2;
+	denominator00 += diffI1 * diffI1;
+	denominator01 += diffI2 * diffI2;
+
+	diffI1 = i1p4 - i1Mean;
+	diffI2 = i2p4 - i2Mean;
+
+	numerator += diffI1 * diffI2;
+	denominator00 += diffI1 * diffI1;
+	denominator01 += diffI2 * diffI2;
+
+	float coeff = numerator / (sqrt(denominator00) * sqrt(denominator01));
+
+	if (numerator == 0 || denominator00 == 0 || denominator01 == 0)
+	{
+		result = 0;
+	}
+	else
+		result = abs(1 - coeff) * 255;
+
+	return result;
+}
+
+void EngineOCT::OpenCLCompute()
+{
+	cl_uint clDeviceIndex = GPU_DEVICE_INDEX;
+
+	size_t localWorkSize = 2;
+	char compilerOptions[] = "-cl-fast-relaxed-math -cl-mad-enable";
+
+	unsigned int inputLen;
+	unsigned int outputLen;
+	unsigned int outputImageHeight;
+
+	unsigned int totalBScans = 500;
+	unsigned int numBScansPerBatch = 50;
+	unsigned int numBScanProcessingIteratations = (unsigned int)floor(totalBScans / numBScansPerBatch);
+	unsigned int numAScans = 500;
+	unsigned int ascanAve = 1;
+	unsigned int bscanAve = 1;
+
+	float bmpMinVal = -155;
+	float bmpMaxVal = -55;
+
+	unsigned int saveBmp = true;
+
+	size_t loglen = 1000000;
+	size_t totalBScanSize;
+	size_t totalBScanVolumeSize;
+	cl_uint numAScansPerBScan;
+	cl_uint totalAScans;
+	cl_uint totalInputLen;
+	cl_uint totalOutputLen;
+	cl_uint totalBatchLength;
+	cl_uint stride;
+
+	float* resampTable;
+	float* refSpec;
+	float* refAScan;
+
+	short* inputSpectra;
+	char* buildLog;
+
+	float* referenceSpectrumFileData;
+	float* referenceAScanFileData;
+	float* resampleTableFileData;
+	float* tempArray;
+
+	char* kernelPath;
 	float* preProcessed;
 	float* cmplx;
 	float* linEnv;
@@ -636,126 +1928,281 @@ void EngineOCT::OpenCLCompute()
 	float* sam;
 	float* ad;
 	unsigned char* bscanBmp;
+	float* correlationMap;
+
+	int res;
+
+	int r;
+	int i;
+	int j;
+
+	int val = 0;
+
+	FILE* inputSpecFile;
+	char* resamplingTablePath;//="/Users/phtomlins/Google Drive/OCT Data/Test/resamplingTable.csv";
+	char* spectraPath;//="/Users/phtomlins/Google Drive/OCT Data/Test/Spectra.bin";
+	char* referenceSpectrumPath;//="/Users/phtomlins/Google Drive/OCT Data/Test/referenceSpectrum.csv";
+	char* referenceAScanPath;//="/Users/phtomlins/Google Drive/OCT Data/Test/referenceAScan.csv";
+	char* rootPath;//="/Users/phtomlins/Google Drive/OCT Data/Test/";
+	char bmpPath[2048];
+
+	kernelPath = "test.cl";
+	rootPath = "./test/";
+
+	//
+	// Try to read the reference spectrum and resampling table
+	//
+	inputLen = ReferenceAScanData.size();
+	outputLen = ReferenceAScanData.size();
+
+	outputImageHeight = outputLen / 2;
+
+	numAScansPerBScan = numAScans * ascanAve * bscanAve;
+	totalAScans = numBScansPerBatch * numAScansPerBScan;
+	totalInputLen = inputLen * totalAScans;
+	totalOutputLen = outputLen * totalAScans;
+	stride = 1500;
+	totalBScanSize = (size_t)stride * (size_t)outputImageHeight;
+	totalBScanVolumeSize = totalBScanSize * (size_t)totalBScans;
+	resampTable = (float*)malloc(sizeof(float) * inputLen);
+	refSpec = (float*)malloc(sizeof(float) * inputLen);
+	refAScan = (float*)malloc(sizeof(float) * inputLen);
+	inputSpectra = (short*)malloc(sizeof(short) * totalInputLen);
+	buildLog = (char*)malloc(sizeof(char) * loglen);
 
 	preProcessed = (float*)malloc(sizeof(float) * totalOutputLen * 2);
 	cmplx = (float*)malloc(sizeof(float) * totalOutputLen * 2);
+	//at* real = (float*)malloc(sizeof(float) * totalOutputLen);
+	//at* imag = (float*)malloc(sizeof(float) * totalOutputLen);
 	linEnv = (float*)malloc(sizeof(float) * totalOutputLen);
 	logEnv = (float*)malloc(sizeof(float) * totalOutputLen);
 	sum = (float*)malloc(sizeof(float) * totalAScans);
 	sam = (float*)malloc(sizeof(float) * totalAScans);
 	ad = (float*)malloc(sizeof(float) * totalAScans);
 	bscanBmp = (unsigned char*)malloc(sizeof(unsigned char*) * totalBScanVolumeSize);
+	correlationMap = (float*)malloc(sizeof(float) * totalOutputLen);
 
-	char bmpPath[2048];
+	inputSpecFile = fopen("spectra.bin", "rb");
 
-
-	for (int i = 0; i < numBScanProccesingIterations-1;i++)
+	for (int i = 0; i<inputLen; i++)
 	{
-		//Pre Process
-		size_t totalWorkItems = totalAScans;
-		size_t spectraSize = totalInputSpectraLength * sizeof(short);
-		size_t numWorkItemsPerGroup = preProcessKernelWorkGroupSize;
+		resampTable[i] = ResamplingTableData[i];
+		refSpec[i] = ReferenceSpectrumData[i];
+		refAScan[i] = ReferenceAScanData[i];
 
-		windowType = 2;
+	}
 
-		err = clSetKernelArg(preProcessingKernel, 10, sizeof(unsigned int), &windowType);
+	res = clOCTInit(
+		clDeviceIndex,
+		inputLen,
+		outputLen,
+		numBScansPerBatch,
+		numAScans,
+		ascanAve,
+		bscanAve,
+		resampTable,
+		refSpec,
+		refAScan,
+		kernelPath,
+		buildLog,
+		&loglen,
+		stride,
+		localWorkSize,
+		localWorkSize,
+		compilerOptions
+		);
 
-		//std::vector<short>tempSpecData(&HostSpectraData[0],
-			//&HostSpectraData[totalInputSpectraLength * sizeof(short)]);
-		
-		//err = clEnqueueWriteBuffer(command_queue,deviceSpectra,CL_TRUE,0,
-			//spectraSize,&inputSpectra,0,NULL,NULL);
-
-		err = clEnqueueNDRangeKernel(command_queue, preProcessingKernel, 1, NULL, 
-			&totalWorkItems, &numWorkItemsPerGroup, 0, NULL, NULL);
-
-		clFinish(command_queue);
-
-		status = clfftEnqueueTransform(clfftPlanHandle, CLFFT_BACKWARD, 1,
-			&command_queue, 0, NULL, NULL,
-			&devicePreProcessedSpectra, &deviceFourierTransform, deviceTemporaryBuffer);
-
-		clFinish(command_queue);
-
-		err = clSetKernelArg(postProcessingKernel, 8, sizeof(cl_float), &bmpMinVal);	// min threshold
-		err = clSetKernelArg(postProcessingKernel, 9, sizeof(cl_float), &bmpMaxVal);
-
-		clFinish(command_queue);
-
-		err = clEnqueueNDRangeKernel(command_queue, postProcessingKernel, 1, NULL,
-			&totalWorkItems, &numWorkItemsPerGroup, 0, NULL, NULL);
-
-		clFinish(command_queue);
-
-		//Copy results to host
-		err = clEnqueueReadBuffer(command_queue, devicePreProcessedSpectra, CL_TRUE, 
-			0, sizeof(float)*totalAScans * inputSpectraLength * 2, preProcessed, 0, NULL, NULL);
-		err = clEnqueueReadBuffer(command_queue, deviceFourierTransform, CL_TRUE, 
-			0, sizeof(float)*totalAScans * outputAScanLength * 2, cmplx, 0, NULL, NULL);
-		err = clEnqueueReadBuffer(command_queue, deviceEnvBScan, CL_TRUE, 
-			0, sizeof(float)* totalAScans * outputAScanLength, linEnv, 0, NULL, NULL);
-		err = clEnqueueReadBuffer(command_queue, deviceLogEnvBScan, CL_TRUE, 
-			0, sizeof(float)*totalAScans * outputAScanLength, logEnv, 0, NULL, NULL);
-		err = clEnqueueReadBuffer(command_queue, deviceSum, CL_TRUE, 0, 
-			sizeof(float)*totalAScans, sum, 0, NULL, NULL);
-		err = clEnqueueReadBuffer(command_queue, deviceSAM, CL_TRUE, 0,
-			sizeof(float)*totalAScans, sam, 0, NULL, NULL);
-		err = clEnqueueReadBuffer(command_queue, deviceAttenuationDepth, CL_TRUE, 0,
-			sizeof(float)*totalAScans, ad, 0, NULL, NULL);
-		err = clEnqueueReadBuffer(command_queue, deviceBScanBmp, CL_TRUE, 0,
-			sizeof(unsigned char)*bitmapBScanVolumeSize, bscanBmp, 0, NULL, NULL);
-
-		clFinish(command_queue);
-
-		//Save BMP
-		for (int j = 0; j < numBScansPerBatch; j++)
+	if (res != CL_SUCCESS)
+	{
+		printf("\nError %d, Build log output:\n", res);
+		printf(buildLog);
+		printf("\n");
+	}
+	else
+	{
+		printf("Processing %i B-Scans in batches of %i, each batch comprising %i A-Scans...\n",
+			totalBScans, numBScansPerBatch, totalAScans);
+		std::vector<unsigned char> bitmapData;
+		for (i = 0; i < numBScanProcessingIteratations; i++)
 		{
-			sprintf(bmpPath, "%sbscan%0.4i.bmp\0", "./test/", i*numBScansPerBatch + j);
+			//
+			// Read the next set of BScans from file
+			//
+			printf(".");
+			fseek(inputSpecFile, sizeof(short) * totalInputLen * i, SEEK_SET);
+			fread(inputSpectra, sizeof(short), totalInputLen, inputSpecFile);
+			printf(".");
 
-			float bitmapFileSize;
-			unsigned int bpp = 24;
-			unsigned int bytesPerPixel = bpp / 8;
-			unsigned int headerLen = 14;    // 14 byte bitmap header
-			unsigned int dibHeaderLen = 12; // BITMAPCOREHEADER
-			unsigned int offset = headerLen + dibHeaderLen;
-			unsigned int planes = 1;
-
-			unsigned int width = numAScansPerBScan;
-			unsigned int height = outputImageHeight;
-
-			unsigned int bytePixel;
-			unsigned int ii;
-			unsigned char* pixelArray;
-			pixelArray = &bscanBmp[j*totalBScanSize];
-
-			bitmapFileSize = headerLen + dibHeaderLen + totalBScanSize;
-
-			FILE* fbmp;
-			fbmp = fopen(bmpPath, "wb");
-
-			fwrite("BM", 1, 2, fbmp);
-			fwrite(&bitmapFileSize, 4, 1, fbmp);
-			fwrite("0", 1, 4, fbmp);   // Write 4 zero bytes to the reserved section
-			fwrite(&offset, 4, 1, fbmp); // Write the offset to the beginning of the image data
-
-			 //
-			 // Write DIB header
-			 //
-			fwrite(&dibHeaderLen, 4, 1, fbmp);
-			fwrite(&width, 2, 1, fbmp);
-			fwrite(&height, 2, 1, fbmp);
-			fwrite(&planes, 2, 1, fbmp);
-			fwrite(&bpp, 2, 1, fbmp);
-
-			for (int k = 0; k<totalBScanSize; k++)
+			res = PreProcess(inputSpectra, WINDOW_TYPE_BLACKMAN);	// This step includes copying the raw spectra from host to device
+			if (res != CL_SUCCESS)
 			{
-				ii = totalBScanSize - k - 1;
-				fwrite(&pixelArray[ii], 1, 1, fbmp);  // Red
+				printf("Failed with error: %i\n", res);
+
 			}
 
-			fclose(fbmp);
+			printf(".");
+			res = InverseTransform();
+			if (res != CL_SUCCESS)
+			{
+				printf("Failed with error: %i\n", res);
+			}
+			//            printf("Done.\n");
+			//printf("Transform returned %d.\n", res);
+			//            printf("Post-processing...");
+			printf(".");
+
+			res = PostProcess(bmpMinVal, bmpMaxVal);
+			if (res != CL_SUCCESS)
+			{
+				printf("Failed with error: %i\n", res);
+
+			}
+			res = Wait();
+
+			if (res == CL_SUCCESS)
+			{
+				res = CopyAllResultsToHost(
+					preProcessed,
+					cmplx,
+					//imag,
+					linEnv,
+					logEnv,
+					sum,
+					sam,
+					ad,
+					bscanBmp
+					);
+
+
+				std::vector<unsigned char> tempBMPDat(bscanBmp,
+					bscanBmp + (totalBScanSize * numBScansPerBatch));
+				bitmapData.insert(bitmapData.end(), tempBMPDat.begin(), tempBMPDat.end());
+
+				printf("\n");
+				//for (j = 0; j < 10; j++)
+				//{
+				//	//printf("%f\n", logEnv[j]);
+				//}
+
+				if (!saveBmp) {
+					for (j = 0; j < numBScansPerBatch; j++)
+					{
+
+
+						sprintf(bmpPath, "%sbscan%0.4i.bmp\0", rootPath, i*numBScansPerBatch + j);
+						//SaveBitmapFromFloatArray(bmpPath,&logEnv[j*numAScansPerBScan*outputLen], (unsigned short)numAScansPerBScan, outputLen, outputLen/2, bmpMinVal, bmpMaxVal);
+
+						SaveBitmap(bmpPath, &bscanBmp[j*totalBScanSize], numAScansPerBScan, outputImageHeight, totalBScanSize);
+						sprintf(bmpPath, "%scorrelationMap%0.4i.bmp\0", rootPath, i*numBScansPerBatch + j);
+					}
+
+				}
+			}
+			printf("%f%% complete\n", (float)i /
+				(float)numBScanProcessingIteratations*100.0f);
+
+
 		}
+
+		printf("Processing B Scans: SUCCESS \n");
+
+		clock_t begin = clock();
+
+		for (int batchNum = 0; batchNum < numBScanProcessingIteratations; batchNum++) {
+
+			printf("Performing Cross Correlation batch %d of %d \n",
+				(batchNum + 1), numBScanProcessingIteratations);
+
+			cl_uint batchSizePlus;
+			unsigned char* tempBScanData;
+			int volumnSizePlus;
+			int size;
+
+
+			if (batchNum == numBScanProcessingIteratations - 1)
+			{
+				//Copy top 50 bScans to GPU
+				batchSizePlus = _numBScans;
+				volumnSizePlus = 500 * 512 * batchSizePlus * 3;
+
+				size = (sizeof(unsigned char) * volumnSizePlus);
+				tempBScanData = (unsigned char*)malloc(size);
+
+				int index00 = (_numBScans * batchNum);
+				int index01 = (_numBScans * (batchNum + 1));
+
+				std::copy(bitmapData.begin() + (index00 * 512 * 500 * 3),
+					bitmapData.begin() + (index01 * 512 * 500 * 3),
+					tempBScanData);
+
+			}
+			else
+			{
+				//Copy top 51 bScans to GPU
+				batchSizePlus = _numBScans + 1;
+				volumnSizePlus = 500 * 512 * batchSizePlus * 3;
+
+				size = (sizeof(unsigned char) * volumnSizePlus);
+				tempBScanData = (unsigned char*)malloc(size);
+
+				int index00 = (_numBScans * batchNum);
+				int index01 = (_numBScans * (batchNum + 1)) + 1;
+
+				std::copy(bitmapData.begin() + (index00 * 512 * 500 * 3),
+					bitmapData.begin() + (index01 * 512 * 500 * 3),
+					tempBScanData);
+
+			}
+
+			res = clSetKernelArg(corrKernel, 1, sizeof(cl_uint), &batchSizePlus);
+
+			res = clEnqueueWriteBuffer(_commandQueue,
+				bScanCorrData,
+				CL_FALSE,
+				0,
+				size,
+				tempBScanData,
+				0,
+				NULL,
+				NULL);
+
+			res = ComputeCorrelation(batchNum, batchSizePlus);
+
+			delete(tempBScanData);
+		}
+
+		clock_t end = clock();
+
+		double elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
+
+		//std::cout << elapsed_secs;
 	}
+
+	fclose(inputSpecFile);
+	clOCTDispose();
+	free(inputSpectra);
+	free(resampTable);
+	free(refSpec);
+	free(refAScan);
+
+	free(preProcessed);
+	free(cmplx);
+	//free(real);
+	//free(imag);
+	free(linEnv);
+	free(logEnv);
+	free(correlationMap);
+	free(sum);
+	free(sam);
+	//free(referenceSpectrumFileData);
+	//free(referenceAScanFileData);
+	//free(resampleTableFileData);
+	//free(tempArray);
+	free(ad);
+	free(bscanBmp);
+	free(buildLog);
+
+	printf("CL compute Done.\n");
 }
 
 

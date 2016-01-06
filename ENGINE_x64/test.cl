@@ -360,6 +360,110 @@ __kernel void octPostProcessingKernel(
 
 }
 
+__kernel void corrKernel(__global unsigned char* bScanData, 
+	const int bScanCount,
+	__global float* correlationResults){
+
+	int bScanNum = 0;
+
+	int kernelX = 2;
+	int kernelY = 2;
+	int bScanSize = 768000; // with 3 colour
+
+	int i1p1 = 0;
+	int i1p2 = 0;
+	int i1p3 = 0;
+	int i1p4 = 0;
+
+	int i2p1 = 0;
+	int i2p2 = 0;
+	int i2p3 = 0;
+	int i2p4 = 0;
+
+	float i1Mean = 0.0f;
+	float i2Mean = 0.0f;
+
+	int result = 0;
+
+	float numerator = 0;
+	float denominator00 = 0;
+	float denominator01 = 0;
+
+	float diffI1 = 0;
+	float diffI2 = 0;
+	float coeff = 0.0f;
+
+	int imageOffset = (500) * (512);
+
+	int kernelID = get_global_id(0);
+
+	//Limit to 511 Rows
+	if (kernelID < (500*511) &&
+		((kernelID - 499) % 500) != 0) {
+
+		for (bScanNum = 0; bScanNum < bScanCount - 1; bScanNum++) {
+
+			numerator = 0;
+			denominator00 = 0;
+			denominator01 = 0;
+
+			i1p1 = bScanData[((0 + kernelID) * 3) + (bScanSize* bScanNum)];
+			i1p2 = bScanData[((1 + kernelID) * 3) + (bScanSize* bScanNum)];
+			i1p3 = bScanData[((0 + kernelID) * 3) + (bScanSize* bScanNum) + 1500];
+			i1p4 = bScanData[((1 + kernelID) * 3) + (bScanSize* bScanNum) + 1500];
+
+			i1Mean = (i1p1 + i1p2 + i1p3 + i1p4) / 4;
+
+			i2p1 = bScanData[((0 + kernelID) * 3) + (bScanSize* (bScanNum + 1))];
+			i2p2 = bScanData[((1 + kernelID) * 3) + (bScanSize* (bScanNum + 1))];
+			i2p3 = bScanData[((0 + kernelID) * 3) + (bScanSize* (bScanNum + 1)) + 1500];
+			i2p4 = bScanData[((1 + kernelID) * 3) + (bScanSize* (bScanNum + 1)) + 1500];
+
+			i2Mean = (i2p1 + i2p2 + i2p3 + i2p4) / 4;
+
+			diffI1 = i1p1 - i1Mean;
+			diffI2 = i2p1 - i2Mean;
+
+			numerator += diffI1 * diffI2;
+			denominator00 += diffI1 * diffI1;
+			denominator01 += diffI2 * diffI2;
+
+			diffI1 = i1p2 - i1Mean;
+			diffI2 = i2p2 - i2Mean;
+
+			numerator += diffI1 * diffI2;
+			denominator00 += diffI1 * diffI1;
+			denominator01 += diffI2 * diffI2;
+
+			diffI1 = i1p3 - i1Mean;
+			diffI2 = i2p3 - i2Mean;
+
+			numerator += diffI1 * diffI2;
+			denominator00 += diffI1 * diffI1;
+			denominator01 += diffI2 * diffI2;
+
+			diffI1 = i1p4 - i1Mean;
+			diffI2 = i2p4 - i2Mean;
+
+			numerator += diffI1 * diffI2;
+			denominator00 += diffI1 * diffI1;
+			denominator01 += diffI2 * diffI2;
+
+			coeff = numerator / (sqrt(denominator00) * sqrt(denominator01));
+
+			if (numerator == 0 || denominator00 == 0 || denominator01 == 0)
+			{
+				result = 0;
+			}
+			else {
+				result = fabs(1 - coeff) * 255;
+			}
+
+
+			correlationResults[(imageOffset*bScanNum)+kernelID] = result;
+		}
+	}
+}
 
 
 //
@@ -446,7 +550,8 @@ __kernel void octCorrelationKernel(
 	axialIndex = kernelIndex - bscanIndex * singleBScanLength - ascanIndex * singleAScanLength;
 	//
 	//
-	if ((bscanIndex - midY >= 0) && (bscanIndex - midY + corrSizeY + offsetY - 1 < totalBScans))    // Make sure that we don't try to use non-existent b-scans
+	if ((bscanIndex - midY >= 0) && (bscanIndex - midY + corrSizeY + offsetY - 1 < totalBScans))    
+		// Make sure that we don't try to use non-existent b-scans
 	{
 		for (y = 0; y<corrSizeY; y++)  // Loop over b-scans
 		{
