@@ -175,7 +175,7 @@
     </ClCompile>
     <Link>
       <AdditionalLibraryDirectories>$(INTELOCLSDKROOT)lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>sdl2_image.lib;AntTweakBar64.lib;OpenCL.lib;SDL2.lib;SDL2main.lib;SDL2_ttf.lib;opengl32.lib;glew32.lib;clFFT.lib;StatTimer.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>sdl2_image.lib;AntTweakBar64.lib;OpenCL.lib;SDL2.lib;SDL2main.lib;SDL2_ttf.lib;opengl32.lib;glew32.lib;clFFT.lib;glu32.lib;StatTimer.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Console</SubSystem>
       <IgnoreSpecificDefaultLibraries>

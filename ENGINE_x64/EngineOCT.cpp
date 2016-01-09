@@ -169,6 +169,8 @@ int TW_CALL TwEventSDL20(const void *sdlEvent)
 	return handled;
 }
 
+std::vector<float> testPixelData;
+
 void EngineRendering(EngineOCT &oct)
 {
 	EngineRenderer engine;
@@ -183,20 +185,53 @@ void EngineRendering(EngineOCT &oct)
 		engineUI.InitialiseUI(engine.SCREENWIDTH, engine.SCREENHEIGHT, oct);
 
 		// Build and compile our shader program
-		Shader ourShader("shaders/vertexshader.vs", "shaders/fragmentshader.fs");
+		Shader ourShader("./shaders/vertexshader.vs",
+			"./shaders/fragmentshader.fs");
+
+		const int particleCount = 500;
+		const int depth = 512;
+		const int scanCount = 10;
+		const int scanSize = depth * (particleCount*8);
 
 		// Set up vertex data (and buffer(s)) and attribute pointers
-		GLfloat vertices[] = {
-			// Positions          // Colors           // Texture Coords
-			0.5f,  0.5f, 0.0f,   1.0f, 0.0f, 0.0f,   1.0f, 1.0f, // Top Right
-			0.5f, -0.5f, 0.0f,   0.0f, 1.0f, 0.0f,   1.0f, 0.0f, // Bottom Right
-			-0.5f, -0.5f, 0.0f,   0.0f, 0.0f, 1.0f,   0.0f, 0.0f, // Bottom Left
-			-0.5f,  0.5f, 0.0f,   1.0f, 1.0f, 0.0f,   0.0f, 1.0f  // Top Left 
-		};
-		GLuint indices[] = {  // Note that we start from 0!
-			0, 1, 3, // First Triangle
-			1, 2, 3  // Second Triangle
-		};
+		std::vector<GLfloat> vertices(particleCount*8*depth*scanCount);
+
+		for (int scanNo = 0; scanNo < scanCount; scanNo++) {
+			for (int j = 0; j < depth; j++) {
+				for (int i = 0; i < (particleCount * 8); i += 8)
+				{
+					//Position
+					vertices[i + (j*particleCount * 8) + (scanNo * scanSize)] = 
+						(((scanNo*1.0f)/(scanCount*1.0f))*0.5f);
+					vertices[i + (j*particleCount * 8) + 1 + (scanNo * scanSize)] = 
+						-0.5f + ((i / (500.0f*8.0f))*1.0f);
+					float det = 0.8f - (((j*1.0f) / (depth*1.0f))*1.0f);
+					vertices[i + (j*particleCount * 8) + 2 + (scanNo * scanSize)] = det;
+					//Colours
+					vertices[i + (j*particleCount * 8) + 3 + (scanNo * scanSize)] = 
+						(testPixelData[(j*particleCount)
+						+ (i / 8) + (scanNo * depth * particleCount)] / 255 * 1.0f);
+					vertices[i + (j*particleCount * 8) + 4 + (scanNo * scanSize)] = 
+						(testPixelData[(j*particleCount)
+						+ (i / 8) + (scanNo * depth * particleCount)] / 255 * 1.0f);
+					vertices[i + (j*particleCount * 8) + 5 + (scanNo * scanSize)] = 
+						(testPixelData[(j*particleCount)
+						+ (i / 8) + (scanNo * depth * particleCount)] / 255 * 1.0f);
+					//Tex Cords
+					vertices[i + (j*particleCount * 8) + 6 + (scanNo * scanSize)] = 0.0f;
+					vertices[i + (j*particleCount * 8) + 7 + (scanNo * scanSize)] = 0.0f;
+				}
+			}
+		}
+		
+
+		std::vector<GLuint> indices(particleCount*depth*scanCount);
+
+		for (int i = 0; i < particleCount*depth*scanCount; i++)
+		{
+			indices[i] = i;
+		}
+
 		GLuint VBO, VAO, EBO;
 		glGenVertexArrays(1, &VAO);
 		glGenBuffers(1, &VBO);
@@ -205,10 +240,12 @@ void EngineRendering(EngineOCT &oct)
 		glBindVertexArray(VAO);
 
 		glBindBuffer(GL_ARRAY_BUFFER, VBO);
-		glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * vertices.size(), vertices.data(), 
+			GL_STATIC_DRAW);
 
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(GLuint) * indices.size(),
+			indices.data(), GL_STATIC_DRAW);
 
 		// Position attribute
 		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (GLvoid*)0);
@@ -217,41 +254,38 @@ void EngineRendering(EngineOCT &oct)
 		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (GLvoid*)(3 * sizeof(GLfloat)));
 		glEnableVertexAttribArray(1);
 		// TexCoord attribute
-		glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (GLvoid*)(6 * sizeof(GLfloat)));
-		glEnableVertexAttribArray(2);
+		//glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (GLvoid*)(6 * sizeof(GLfloat)));
+		//glEnableVertexAttribArray(2);
 
 		glBindVertexArray(0); // Unbind VAO
 
-
-							  // Load and create a texture 
-		GLuint texture;
-		glGenTextures(1, &texture);
-		glBindTexture(GL_TEXTURE_2D, texture); // All upcoming GL_TEXTURE_2D operations now have effect on this texture object
-											   // Set the texture wrapping parameters
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	// Set texture wrapping to GL_REPEAT (usually basic wrapping method)
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-		// Set texture filtering parameters
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		// Load image, create texture and generate mipmaps
-		SDL_Surface* image = engine.LoadSurface("textures/wall.png");
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image->w, image->h, 0, GL_RGBA, GL_UNSIGNED_BYTE, image->pixels);
-		glGenerateMipmap(GL_TEXTURE_2D);
-
-		SDL_FreeSurface(image);
-		glBindTexture(GL_TEXTURE_2D, 0); // Unbind texture when done, so we won't accidentily mess up our texture.
-
-
+	
 		SDL_Event e;
 		SDL_StartTextInput();
 		int test;
 		float val = 0.0f;
 		bool quit = false;
 
+		glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 3.0f);
+		glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
+		glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
+
+		GLfloat cameraSpeed = 0.05f;
+		SDL_Keycode currentCode;
+
+		bool firstMouse = true;
+		int xpos, ypos;
+
+		GLfloat yaw = -90.0f;	// Yaw is initialized to -90.0 degrees since a yaw of 0.0 results in a direction vector pointing to the right (due to how Eular angles work) so we initially rotate a bit to the left.
+		GLfloat pitch = 0.0f;
+		GLfloat lastX = 800 / 2.0;
+		GLfloat lastY = 600 / 2.0;
+
+		float angle = 0.0f;
+
 		while (!quit)
 		{
-
-			while (SDL_PollEvent(&e) != 0)
+			if (SDL_PollEvent(&e) != 0)
 			{
 				//test = TwEventSDL20(&e, SDL_MAJOR_VERSION, SDL_MINOR_VERSION);
 				test = TwEventSDL20(&e);
@@ -262,25 +296,65 @@ void EngineRendering(EngineOCT &oct)
 					{
 						quit = true;
 					}
-					else if (e.type == SDL_TEXTINPUT)
+					else if (e.type == SDL_KEYDOWN && e.key.repeat != 0)
 					{
-						int x = 0, y = 0;
-						SDL_GetMouseState(&x, &y);
-						engine.HandleInput(e.text.text[0], x, y);
+						currentCode = e.key.keysym.sym;
+
+						if (currentCode == SDLK_w)
+							cameraPos += cameraSpeed * cameraFront;
+						if (currentCode == SDLK_s)
+							cameraPos -= cameraSpeed * cameraFront;
+						if (currentCode == SDLK_a)
+							cameraPos -= glm::normalize(
+								glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+						if (currentCode == SDLK_d)
+							cameraPos += glm::normalize(
+								glm::cross(cameraFront, cameraUp)) * cameraSpeed;
 					}
 				}
+
+
+				SDL_GetMouseState(&xpos, &ypos);
+
+				if (firstMouse)
+				{
+					lastX = xpos;
+					lastY = ypos;
+					firstMouse = false;
+				}
+				GLfloat xoffset = xpos - lastX;
+				GLfloat yoffset = lastY - ypos;
+
+				lastX = xpos;
+				lastY = ypos;
+
+				GLfloat sensitivity = 0.05;
+				xoffset *= sensitivity;
+				yoffset *= sensitivity;
+
+				yaw += xoffset;
+				pitch += yoffset;
+
+				// Make sure that when pitch is out of bounds, screen doesn't get flipped
+				if (pitch > 89.0f)
+					pitch = 89.0f;
+				if (pitch < -89.0f)
+					pitch = -89.0f;
+
+				glm::vec3 front;
+				front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
+				front.y = sin(glm::radians(pitch));
+				front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
+				//cameraFront = glm::normalize(front);
 			}
+
 
 			// Render
 			// Clear the color buffer
+
+		
 			glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
-			glClear(GL_COLOR_BUFFER_BIT);
-
-
-			// Bind Textures using texture units
-			glActiveTexture(GL_TEXTURE0);
-			glBindTexture(GL_TEXTURE_2D, texture);
-			glUniform1i(glGetUniformLocation(ourShader.Program, "ourTexture1"), 0);
+			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 			// Activate shader
 			ourShader.Use();
@@ -289,12 +363,15 @@ void EngineRendering(EngineOCT &oct)
 			glm::mat4 model;
 			glm::mat4 view;
 			glm::mat4 projection;
+			model = glm::rotate(model, -45.0f, glm::vec3(1.0f, 0.0f, 0.0f));
 
-			val += 0.01f;
+			angle = (400.0f - xpos);
+			angle = angle / 360.0f * M_PI * 1.0f;
+			model = glm::rotate(model, angle, glm::vec3(0.0f, 0.0f, 1.0f));
 
-			model = glm::rotate(model, val, glm::vec3(0.0f, 1.0f, 0.0f));
-			view = glm::translate(view, glm::vec3(0.0f, 0.0f, -2.0f));
-			projection = glm::perspective(70.0f, (GLfloat)800 / (GLfloat)600, 0.1f, 100.0f);
+			view = glm::translate(view, glm::vec3(0.0f, 0.0f, -3.0f));
+			projection = glm::perspective(45.0f, (GLfloat)800 / (GLfloat)600, 
+				0.1f, 100.0f);
 			// Get their uniform location
 			GLint modelLoc = glGetUniformLocation(ourShader.Program, "model");
 			GLint viewLoc = glGetUniformLocation(ourShader.Program, "view");
@@ -307,10 +384,14 @@ void EngineRendering(EngineOCT &oct)
 
 			// Draw container
 			glBindVertexArray(VAO);
-			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+			glDrawElements(GL_POINTS, particleCount*depth*scanCount, GL_UNSIGNED_INT, 0);
 			glBindVertexArray(0);
 
 			TwDraw();
+
+			glPointSize(1.0);
+
+
 
 			SDL_GL_SwapWindow(engine.EngineWindow);
 
@@ -321,6 +402,8 @@ void EngineRendering(EngineOCT &oct)
 		SDL_StopTextInput();
 
 		// Properly de-allocate all resources once they've outlived their purpose
+
+
 		glDeleteVertexArrays(1, &VAO);
 		glDeleteBuffers(1, &VBO);
 	}
@@ -1230,6 +1313,8 @@ int ComputeCorrelation(int batchNum, int batchSize)
 
 	std::vector<float> results(correlationMap, correlationMap + (totalWorkItems*batchSize));
 
+	testPixelData = results;
+
 	if (!saveBMP) {
 		for (int bitMapNum = 0; bitMapNum < batchSize - 1; bitMapNum++)
 		{
@@ -1247,75 +1332,77 @@ int ComputeCorrelation(int batchNum, int batchSize)
 				corrCoeff.push_back(rowData00);
 			}
 
+			if (!saveBMP) {
 
-			int w = 499;
-			int h = 511;
+				int w = 499;
+				int h = 511;
 
-			FILE *f = nullptr;
-			if (f)
-				free(f);
+				FILE *f = nullptr;
+				if (f)
+					free(f);
 
-			unsigned char *img = NULL;
-			int filesize = 54 + 3 * w*h;  //w is your image width, h is image height, both int
-			if (img)
-				free(img);
-			img = (unsigned char *)malloc(3 * w*h);
-			memset(img, 0, sizeof(img));
+				unsigned char *img = NULL;
+				int filesize = 54 + 3 * w*h;  //w is your image width, h is image height, both int
+				if (img)
+					free(img);
+				img = (unsigned char *)malloc(3 * w*h);
+				memset(img, 0, sizeof(img));
 
-			for (int xCor = 0; xCor < w; xCor++)
-			{
-				for (int yCor = 0; yCor < h; yCor++)
+				for (int xCor = 0; xCor < w; xCor++)
 				{
-					int x = xCor;
-					int y = (h - 1) - yCor;
-					int r = corrCoeff[yCor][xCor];
-					int g = corrCoeff[yCor][xCor];
-					int b = corrCoeff[yCor][xCor];
-					if (r > 255) r = 255;
-					if (g > 255) g = 255;
-					if (b > 255) b = 255;
-					img[(x + y*w) * 3 + 2] = (unsigned char)(r);
-					img[(x + y*w) * 3 + 1] = (unsigned char)(g);
-					img[(x + y*w) * 3 + 0] = (unsigned char)(b);
+					for (int yCor = 0; yCor < h; yCor++)
+					{
+						int x = xCor;
+						int y = (h - 1) - yCor;
+						int r = corrCoeff[yCor][xCor];
+						int g = corrCoeff[yCor][xCor];
+						int b = corrCoeff[yCor][xCor];
+						if (r > 255) r = 255;
+						if (g > 255) g = 255;
+						if (b > 255) b = 255;
+						img[(x + y*w) * 3 + 2] = (unsigned char)(r);
+						img[(x + y*w) * 3 + 1] = (unsigned char)(g);
+						img[(x + y*w) * 3 + 0] = (unsigned char)(b);
+					}
 				}
+
+				unsigned char bmpfileheader[14] = { 'B','M', 0,0,0,0, 0,0, 0,0, 54,0,0,0 };
+				unsigned char bmpinfoheader[40] = { 40,0,0,0, 0,0,0,0, 0,0,0,0, 1,0, 24,0 };
+				unsigned char bmppad[3] = { 0,0,0 };
+
+				bmpfileheader[2] = (unsigned char)(filesize);
+				bmpfileheader[3] = (unsigned char)(filesize >> 8);
+				bmpfileheader[4] = (unsigned char)(filesize >> 16);
+				bmpfileheader[5] = (unsigned char)(filesize >> 24);
+
+				bmpinfoheader[4] = (unsigned char)(w);
+				bmpinfoheader[5] = (unsigned char)(w >> 8);
+				bmpinfoheader[6] = (unsigned char)(w >> 16);
+				bmpinfoheader[7] = (unsigned char)(w >> 24);
+				bmpinfoheader[8] = (unsigned char)(h);
+				bmpinfoheader[9] = (unsigned char)(h >> 8);
+				bmpinfoheader[10] = (unsigned char)(h >> 16);
+				bmpinfoheader[11] = (unsigned char)(h >> 24);
+
+
+				std::string str = "./results/cResult" +
+					std::to_string(bitMapNum + (batchNum * 1000))
+					+ ".bmp";
+				const char* gfgfg = str.c_str();
+
+				f = fopen(gfgfg, "wb");
+				fwrite(bmpfileheader, 1, 14, f);
+				fwrite(bmpinfoheader, 1, 40, f);
+				for (int imgIndex = 0; imgIndex < h; imgIndex++)
+				{
+					fwrite(img + (w*(imgIndex - 1) * 3), 3, w, f);
+					fwrite(bmppad, 1, (4 - (w * 3) % 4) % 4, f);
+				}
+
+				free(img);
+
+				fclose(f);
 			}
-
-			unsigned char bmpfileheader[14] = { 'B','M', 0,0,0,0, 0,0, 0,0, 54,0,0,0 };
-			unsigned char bmpinfoheader[40] = { 40,0,0,0, 0,0,0,0, 0,0,0,0, 1,0, 24,0 };
-			unsigned char bmppad[3] = { 0,0,0 };
-
-			bmpfileheader[2] = (unsigned char)(filesize);
-			bmpfileheader[3] = (unsigned char)(filesize >> 8);
-			bmpfileheader[4] = (unsigned char)(filesize >> 16);
-			bmpfileheader[5] = (unsigned char)(filesize >> 24);
-
-			bmpinfoheader[4] = (unsigned char)(w);
-			bmpinfoheader[5] = (unsigned char)(w >> 8);
-			bmpinfoheader[6] = (unsigned char)(w >> 16);
-			bmpinfoheader[7] = (unsigned char)(w >> 24);
-			bmpinfoheader[8] = (unsigned char)(h);
-			bmpinfoheader[9] = (unsigned char)(h >> 8);
-			bmpinfoheader[10] = (unsigned char)(h >> 16);
-			bmpinfoheader[11] = (unsigned char)(h >> 24);
-
-
-			std::string str = "./results/cResult" +
-				std::to_string(bitMapNum + (batchNum * 1000))
-				+ ".bmp";
-			const char* gfgfg = str.c_str();
-
-			f = fopen(gfgfg, "wb");
-			fwrite(bmpfileheader, 1, 14, f);
-			fwrite(bmpinfoheader, 1, 40, f);
-			for (int imgIndex = 0; imgIndex < h; imgIndex++)
-			{
-				fwrite(img + (w*(imgIndex - 1) * 3), 3, w, f);
-				fwrite(bmppad, 1, (4 - (w * 3) % 4) % 4, f);
-			}
-
-			free(img);
-
-			fclose(f);
 		}
 	}
 
@@ -2108,7 +2195,7 @@ void EngineOCT::OpenCLCompute()
 
 		clock_t begin = clock();
 
-		for (int batchNum = 0; batchNum < numBScanProcessingIteratations; batchNum++) {
+		for (int batchNum = 0; batchNum < 1; batchNum++) {
 
 			printf("Performing Cross Correlation batch %d of %d \n",
 				(batchNum + 1), numBScanProcessingIteratations);
@@ -2204,8 +2291,6 @@ void EngineOCT::OpenCLCompute()
 
 	printf("CL compute Done.\n");
 }
-
-
 
 int main(int argc, char *argv[])
 {
