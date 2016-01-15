@@ -187,17 +187,24 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Engine.cpp" />
-    <ClCompile Include="Shader.cpp" />
+    <ClCompile Include="EngineContentManager.cpp" />
+    <ClCompile Include="EngineObject.cpp" />
+    <ClCompile Include="EngineShader.cpp" />
     <ClCompile Include="EngineOCT.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="EngineRenderer.cpp" />
+    <ClCompile Include="EngineTexture.cpp" />
     <ClCompile Include="UI.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Shader.h" />
+    <ClInclude Include="Engine.h" />
+    <ClInclude Include="EngineContentManager.h" />
+    <ClInclude Include="EngineObject.h" />
+    <ClInclude Include="EngineShader.h" />
     <ClInclude Include="EngineOCT.h" />
     <ClInclude Include="EngineRenderer.h" />
+    <ClInclude Include="EngineTexture.h" />
     <ClInclude Include="UI.h" />
   </ItemGroup>
   <ItemGroup>

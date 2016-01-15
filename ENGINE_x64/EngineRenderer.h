@@ -5,7 +5,7 @@
 #include <SDL_image.h>
 #include <AntTweakBar.h>
 
-#include "Shader.h"
+#include "EngineShader.h"
 
 #include <glm.hpp>
 #include <gtc/matrix_transform.hpp>
@@ -30,7 +30,6 @@ public:
 	void HandleInput(unsigned char targetKey, int xPos, int yPos);
 	void Update();
 	void Render();
-	SDL_Surface* LoadSurface(std::string path);
 
 private:
 	bool InitializeOpenGL();

@@ -16,7 +16,7 @@
     <Filter Include="Source Files\Engine UI">
       <UniqueIdentifier>{65c47df1-1679-4ff1-8fb1-5b3dab6291e2}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\Renderer Components">
+    <Filter Include="Source Files\Engine Components">
       <UniqueIdentifier>{f09a4d44-18af-48f3-b63f-f622194bb1bb}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
@@ -27,14 +27,23 @@
     <ClCompile Include="EngineRenderer.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Shader.cpp">
-      <Filter>Source Files\Renderer Components</Filter>
-    </ClCompile>
     <ClCompile Include="Engine.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="UI.cpp">
       <Filter>Source Files\Engine UI</Filter>
+    </ClCompile>
+    <ClCompile Include="EngineShader.cpp">
+      <Filter>Source Files\Engine Components</Filter>
+    </ClCompile>
+    <ClCompile Include="EngineTexture.cpp">
+      <Filter>Source Files\Engine Components</Filter>
+    </ClCompile>
+    <ClCompile Include="EngineContentManager.cpp">
+      <Filter>Source Files\Engine Components</Filter>
+    </ClCompile>
+    <ClCompile Include="EngineObject.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -44,10 +53,22 @@
     <ClInclude Include="EngineRenderer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Shader.h">
+    <ClInclude Include="UI.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="UI.h">
+    <ClInclude Include="Engine.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="EngineShader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="EngineTexture.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="EngineContentManager.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="EngineObject.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

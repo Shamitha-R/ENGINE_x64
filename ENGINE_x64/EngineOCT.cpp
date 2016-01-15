@@ -10,7 +10,7 @@
 #define MAX_PROGRAM_FILE_LENGTH 10240000
 #define DEVICE_INFO_RETURN_SIZE 1024
 #define NUM_DEVICES_TO_BUILD_FOR 1	// Number of devices to build a program for - should be 1, just build for the main GPU
-#define INTERPOLATION_ORDER 2		// Use second order interpolation
+#define INTERPOLATION_ORDER 2		// Enable second order interpolation
 //
 // Define the window type constants
 //
@@ -77,342 +77,340 @@ void EngineOCT::LoadOCTData()
 	//std::cout << "Spectra.bin successfully read\n";
 }
 
-int TW_CALL TwEventSDL20(const void *sdlEvent)
-{
-	int handled = 0;
-	const SDL_Event *event = (const SDL_Event *)sdlEvent;
-
-	if (event == NULL)
-		return 0;
-
-	switch (event->type)
-	{
-	case SDL_KEYDOWN:
-		if (event->key.keysym.sym & SDLK_SCANCODE_MASK) {
-			int key = 0;
-			switch (event->key.keysym.sym) {
-			case SDLK_UP:
-				key = TW_KEY_UP;
-				break;
-			case SDLK_DOWN:
-				key = TW_KEY_DOWN;
-				break;
-			case SDLK_RIGHT:
-				key = TW_KEY_RIGHT;
-				break;
-			case SDLK_LEFT:
-				key = TW_KEY_LEFT;
-				break;
-			case SDLK_INSERT:
-				key = TW_KEY_INSERT;
-				break;
-			case SDLK_HOME:
-				key = TW_KEY_HOME;
-				break;
-			case SDLK_END:
-				key = TW_KEY_END;
-				break;
-			case SDLK_PAGEUP:
-				key = TW_KEY_PAGE_UP;
-				break;
-			case SDLK_PAGEDOWN:
-				key = TW_KEY_PAGE_DOWN;
-				break;
-			default:
-				if (event->key.keysym.sym >= SDLK_F1 &&
-					event->key.keysym.sym <= SDLK_F12) {
-					key = event->key.keysym.sym + TW_KEY_F1 - SDLK_F1;
-				}
-				break;
-			}
-			if (key != 0) {
-				handled = TwKeyPressed(key, event->key.keysym.mod);
-			}
-		}
-		else {
-			handled = TwKeyPressed(event->key.keysym.sym /*& 0xFF*/,
-				event->key.keysym.mod);
-		}
-		break;
-	case SDL_MOUSEMOTION:
-		handled = TwMouseMotion(event->motion.x, event->motion.y);
-		break;
-	case SDL_MOUSEBUTTONUP:
-	case SDL_MOUSEBUTTONDOWN:
-		if (event->type == SDL_MOUSEBUTTONDOWN &&
-			(event->button.button == 4 || event->button.button == 5)) {
-			// mouse wheel
-			static int s_WheelPos = 0;
-			if (event->button.button == 4)
-				++s_WheelPos;
-			else
-				--s_WheelPos;
-			handled = TwMouseWheel(s_WheelPos);
-		}
-		else {
-			handled = TwMouseButton(
-				(event->type == SDL_MOUSEBUTTONUP) ?
-				TW_MOUSE_RELEASED : TW_MOUSE_PRESSED,
-				(TwMouseButtonID)event->button.button);
-		}
-		break;
-	case SDL_WINDOWEVENT:
-		if (event->window.event == SDL_WINDOWEVENT_RESIZED) {
-			// tell the new size to TweakBar
-			TwWindowSize(event->window.data1, event->window.data2);
-			// do not set 'handled'
-			// SDL_VIDEORESIZE may be also processed by the calling application
-		}
-		break;
-	}
-
-	return handled;
-}
+//void setupTexture()
+//{
+//	for (int i = 0; i < 20*20*3;i++)
+//	{
+//		textureData[i] = ((i*1.0f)/(400*3.0f*1.0f))*255;
+//	}
+//
+//	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+//	glPixelStorei(GL_PACK_ALIGNMENT, 1);
+//	glGenTextures(1, &textureName);   // generate a texture handler really reccomanded (mandatory in openGL 3.0)
+//	glBindTexture(GL_TEXTURE_2D, textureName); // tell openGL that we are using the texture 
+//
+//	glTexImage2D(GL_TEXTURE_2D, 0, 3, width, height, 0, GL_RGB,
+//		GL_UNSIGNED_BYTE, (GLvoid*)textureData); // send the texture data
+//
+//	 // Set up the texture
+//	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+//	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+//	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+//	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+//
+//	glEnable(GL_TEXTURE_2D);
+//}
+//
+//void updateTexture()
+//{			
+//	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGB, /* or GL_BGR, depends on how your video is decoded*/
+//		GL_UNSIGNED_BYTE, textureData);
+//
+//	glBindTexture(GL_TEXTURE_2D, textureName);
+//	glBegin(GL_QUADS);  // draw something with the texture on
+//	glTexCoord2f(0.0f, 0.0f); glVertex2f(-0.5f, -0.5f);
+//	glTexCoord2f(1.0f, 0.0f); glVertex2f(0.5f, -0.5f);
+//	glTexCoord2f(1.0f, 1.0f); glVertex2f(0.5f, 0.5f);
+//	glTexCoord2f(0.0f, 1.0f); glVertex2f(-0.5f, 0.5f);
+//	glEnd();
+//}
 
 std::vector<float> testPixelData;
-
 void EngineRendering(EngineOCT &oct)
 {
-	EngineRenderer engine;
+	//EngineRenderer engine;
 
-	if (!engine.InitializeEngine())
-	{
-		printf("Engine Initialization Failed\n");
-	}
-	else
-	{
-		UI engineUI;
-		engineUI.InitialiseUI(engine.SCREENWIDTH, engine.SCREENHEIGHT, oct);
+	//if (!engine.InitializeEngine())
+	//{
+	//	printf("Engine Initialization Failed\n");
+	//}
+	//else
+	//{
+	//	UI engineUI;
+	//	engineUI.InitialiseUI(engine.SCREENWIDTH, engine.SCREENHEIGHT, oct);
 
-		// Build and compile our shader program
-		Shader ourShader("./shaders/vertexshader.vs",
-			"./shaders/fragmentshader.fs");
+	//	//setupTexture();
 
-		const int particleCount = 500;
-		const int depth = 512;
-		const int scanCount = 10;
-		const int scanSize = depth * (particleCount*8);
+	//   //Build and compile our shader program
+	//    EngineShader ourShader("./shaders/vertexshader.vs",
+	//		"./shaders/fragmentshader.fs");
 
-		// Set up vertex data (and buffer(s)) and attribute pointers
-		std::vector<GLfloat> vertices(particleCount*8*depth*scanCount);
+	//	//const int particleCount = 500;
+	//	//const int depth = 512;
+	//	//const int scanCount = 10;
+	//	//const int scanSize = depth * (particleCount*8);
 
-		for (int scanNo = 0; scanNo < scanCount; scanNo++) {
-			for (int j = 0; j < depth; j++) {
-				for (int i = 0; i < (particleCount * 8); i += 8)
-				{
-					//Position
-					vertices[i + (j*particleCount * 8) + (scanNo * scanSize)] = 
-						(((scanNo*1.0f)/(scanCount*1.0f))*0.5f);
-					vertices[i + (j*particleCount * 8) + 1 + (scanNo * scanSize)] = 
-						-0.5f + ((i / (500.0f*8.0f))*1.0f);
-					float det = 0.8f - (((j*1.0f) / (depth*1.0f))*1.0f);
-					vertices[i + (j*particleCount * 8) + 2 + (scanNo * scanSize)] = det;
-					//Colours
-					vertices[i + (j*particleCount * 8) + 3 + (scanNo * scanSize)] = 
-						(testPixelData[(j*particleCount)
-						+ (i / 8) + (scanNo * depth * particleCount)] / 255 * 1.0f);
-					vertices[i + (j*particleCount * 8) + 4 + (scanNo * scanSize)] = 
-						(testPixelData[(j*particleCount)
-						+ (i / 8) + (scanNo * depth * particleCount)] / 255 * 1.0f);
-					vertices[i + (j*particleCount * 8) + 5 + (scanNo * scanSize)] = 
-						(testPixelData[(j*particleCount)
-						+ (i / 8) + (scanNo * depth * particleCount)] / 255 * 1.0f);
-					//Tex Cords
-					vertices[i + (j*particleCount * 8) + 6 + (scanNo * scanSize)] = 0.0f;
-					vertices[i + (j*particleCount * 8) + 7 + (scanNo * scanSize)] = 0.0f;
-				}
-			}
-		}
-		
+	//	//// Set up vertex data (and buffer(s)) and attribute pointers
+	//	//std::vector<GLfloat> vertices(particleCount*8*depth*scanCount);
 
-		std::vector<GLuint> indices(particleCount*depth*scanCount);
+	//	//for (int scanNo = 0; scanNo < scanCount; scanNo++) {
+	//	//	for (int j = 0; j < depth; j++) {
+	//	//		for (int i = 0; i < (particleCount * 8); i += 8)
+	//	//		{
+	//	//			//Position
+	//	//			vertices[i + (j*particleCount * 8) + (scanNo * scanSize)] = 
+	//	//				(((scanNo*1.0f)/(scanCount*1.0f))*0.5f);
+	//	//			vertices[i + (j*particleCount * 8) + 1 + (scanNo * scanSize)] = 
+	//	//				-0.5f + ((i / (500.0f*8.0f))*1.0f);
+	//	//			float det = 0.8f - (((j*1.0f) / (depth*1.0f))*1.0f);
+	//	//			vertices[i + (j*particleCount * 8) + 2 + (scanNo * scanSize)] = det;
+	//	//			//Colours
+	//	//			vertices[i + (j*particleCount * 8) + 3 + (scanNo * scanSize)] = 
+	//	//				(testPixelData[(j*particleCount)
+	//	//				+ (i / 8) + (scanNo * depth * particleCount)] / 255 * 1.0f);
+	//	//			vertices[i + (j*particleCount * 8) + 4 + (scanNo * scanSize)] = 
+	//	//				(testPixelData[(j*particleCount)
+	//	//				+ (i / 8) + (scanNo * depth * particleCount)] / 255 * 1.0f);
+	//	//			vertices[i + (j*particleCount * 8) + 5 + (scanNo * scanSize)] = 
+	//	//				(testPixelData[(j*particleCount)
+	//	//				+ (i / 8) + (scanNo * depth * particleCount)] / 255 * 1.0f);
+	//	//			//Tex Cords
+	//	//			vertices[i + (j*particleCount * 8) + 6 + (scanNo * scanSize)] = 0.0f;
+	//	//			vertices[i + (j*particleCount * 8) + 7 + (scanNo * scanSize)] = 0.0f;
+	//	//		}
+	//	//	}
+	//	//}
+	//	//
 
-		for (int i = 0; i < particleCount*depth*scanCount; i++)
-		{
-			indices[i] = i;
-		}
+	//	//std::vector<GLuint> indices(particleCount*depth*scanCount);
 
-		GLuint VBO, VAO, EBO;
-		glGenVertexArrays(1, &VAO);
-		glGenBuffers(1, &VBO);
-		glGenBuffers(1, &EBO);
+	//	//for (int i = 0; i < particleCount*depth*scanCount; i++)
+	//	//{
+	//	//	indices[i] = i;
+	//	//}
 
-		glBindVertexArray(VAO);
-
-		glBindBuffer(GL_ARRAY_BUFFER, VBO);
-		glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * vertices.size(), vertices.data(), 
-			GL_STATIC_DRAW);
-
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(GLuint) * indices.size(),
-			indices.data(), GL_STATIC_DRAW);
-
-		// Position attribute
-		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (GLvoid*)0);
-		glEnableVertexAttribArray(0);
-		// Color attribute
-		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (GLvoid*)(3 * sizeof(GLfloat)));
-		glEnableVertexAttribArray(1);
-		// TexCoord attribute
-		//glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (GLvoid*)(6 * sizeof(GLfloat)));
-		//glEnableVertexAttribArray(2);
-
-		glBindVertexArray(0); // Unbind VAO
-
-	
-		SDL_Event e;
-		SDL_StartTextInput();
-		int test;
-		float val = 0.0f;
-		bool quit = false;
-
-		glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 3.0f);
-		glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
-		glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
-
-		GLfloat cameraSpeed = 0.05f;
-		SDL_Keycode currentCode;
-
-		bool firstMouse = true;
-		int xpos, ypos;
-
-		GLfloat yaw = -90.0f;	// Yaw is initialized to -90.0 degrees since a yaw of 0.0 results in a direction vector pointing to the right (due to how Eular angles work) so we initially rotate a bit to the left.
-		GLfloat pitch = 0.0f;
-		GLfloat lastX = 800 / 2.0;
-		GLfloat lastY = 600 / 2.0;
-
-		float angle = 0.0f;
-
-		while (!quit)
-		{
-			if (SDL_PollEvent(&e) != 0)
-			{
-				//test = TwEventSDL20(&e, SDL_MAJOR_VERSION, SDL_MINOR_VERSION);
-				test = TwEventSDL20(&e);
-
-				if (!test) {
-
-					if (e.type == SDL_QUIT)
-					{
-						quit = true;
-					}
-					else if (e.type == SDL_KEYDOWN && e.key.repeat != 0)
-					{
-						currentCode = e.key.keysym.sym;
-
-						if (currentCode == SDLK_w)
-							cameraPos += cameraSpeed * cameraFront;
-						if (currentCode == SDLK_s)
-							cameraPos -= cameraSpeed * cameraFront;
-						if (currentCode == SDLK_a)
-							cameraPos -= glm::normalize(
-								glm::cross(cameraFront, cameraUp)) * cameraSpeed;
-						if (currentCode == SDLK_d)
-							cameraPos += glm::normalize(
-								glm::cross(cameraFront, cameraUp)) * cameraSpeed;
-					}
-				}
+	//	//glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * vertices.size(), vertices.data(), 
+	//	//	GL_STATIC_DRAW);
 
 
-				SDL_GetMouseState(&xpos, &ypos);
+	//	// Set up vertex data (and buffer(s)) and attribute pointers
+	//	GLfloat vertices[] = {
+	//		// Positions          // Colors           // Texture Coords
+	//		0.5f,  0.5f, 0.0f,   1.0f, 0.0f, 0.0f,   1.0f, 1.0f, // Top Right
+	//		0.5f, -0.5f, 0.0f,   0.0f, 1.0f, 0.0f,   1.0f, 0.0f, // Bottom Right
+	//		-0.5f, -0.5f, 0.0f,   0.0f, 0.0f, 1.0f,   0.0f, 0.0f, // Bottom Left
+	//		-0.5f,  0.5f, 0.0f,   1.0f, 1.0f, 0.0f,   0.0f, 1.0f  // Top Left 
+	//	};
+	//	GLuint indices[] = {  // Note that we start from 0!
+	//		0, 1, 3, // First Triangle
+	//		1, 2, 3  // Second Triangle
+	//	};
+	//	GLuint VBO, VAO, EBO;
+	//	glGenVertexArrays(1, &VAO);
+	//	glGenBuffers(1, &VBO);
+	//	glGenBuffers(1, &EBO);
 
-				if (firstMouse)
-				{
-					lastX = xpos;
-					lastY = ypos;
-					firstMouse = false;
-				}
-				GLfloat xoffset = xpos - lastX;
-				GLfloat yoffset = lastY - ypos;
+	//	glBindVertexArray(VAO);
 
-				lastX = xpos;
-				lastY = ypos;
+	//	glBindBuffer(GL_ARRAY_BUFFER, VBO);
+	//	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
-				GLfloat sensitivity = 0.05;
-				xoffset *= sensitivity;
-				yoffset *= sensitivity;
+	//	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+	//	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
 
-				yaw += xoffset;
-				pitch += yoffset;
+	//	// Position attribute
+	//	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (GLvoid*)0);
+	//	glEnableVertexAttribArray(0);
+	//	// Color attribute
+	//	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (GLvoid*)(3 * sizeof(GLfloat)));
+	//	glEnableVertexAttribArray(1);
+	//	// TexCoord attribute
+	//	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (GLvoid*)(6 * sizeof(GLfloat)));
+	//	glEnableVertexAttribArray(2);
 
-				// Make sure that when pitch is out of bounds, screen doesn't get flipped
-				if (pitch > 89.0f)
-					pitch = 89.0f;
-				if (pitch < -89.0f)
-					pitch = -89.0f;
-
-				glm::vec3 front;
-				front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
-				front.y = sin(glm::radians(pitch));
-				front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
-				//cameraFront = glm::normalize(front);
-			}
-
-
-			// Render
-			// Clear the color buffer
-
-		
-			glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
-			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-			// Activate shader
-			ourShader.Use();
-
-			// Create transformations
-			glm::mat4 model;
-			glm::mat4 view;
-			glm::mat4 projection;
-			model = glm::rotate(model, -45.0f, glm::vec3(1.0f, 0.0f, 0.0f));
-
-			angle = (400.0f - xpos);
-			angle = angle / 360.0f * M_PI * 1.0f;
-			model = glm::rotate(model, angle, glm::vec3(0.0f, 0.0f, 1.0f));
-
-			view = glm::translate(view, glm::vec3(0.0f, 0.0f, -3.0f));
-			projection = glm::perspective(45.0f, (GLfloat)800 / (GLfloat)600, 
-				0.1f, 100.0f);
-			// Get their uniform location
-			GLint modelLoc = glGetUniformLocation(ourShader.Program, "model");
-			GLint viewLoc = glGetUniformLocation(ourShader.Program, "view");
-			GLint projLoc = glGetUniformLocation(ourShader.Program, "projection");
-			// Pass them to the shaders
-			glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-			glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
-			// Note: currently we set the projection matrix each frame, but since the projection matrix rarely changes it's often best practice to set it outside the main loop only once.
-			glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
-
-			// Draw container
-			glBindVertexArray(VAO);
-			glDrawElements(GL_POINTS, particleCount*depth*scanCount, GL_UNSIGNED_INT, 0);
-			glBindVertexArray(0);
-
-			TwDraw();
-
-			glPointSize(1.0);
+	//	glBindVertexArray(0); // Unbind VAO
 
 
+	//						  // Load and create a texture 
+	//	GLuint texture;
+	//	glGenTextures(1, &texture);
+	//	glBindTexture(GL_TEXTURE_2D, texture); // All upcoming GL_TEXTURE_2D operations now have effect on this texture object
+	//
+	//	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	
+	//	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	//	//// Set texture filtering parameters
+	//	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	//	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-			SDL_GL_SwapWindow(engine.EngineWindow);
+	//	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	//	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	//	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+	//	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
 
-			//engine.Render();
-		}
+	//	// Load image, create texture and generate mipmaps
+	//	//SDL_Surface* image = engine.LoadSurface("textures/wall.png");
+
+	//	//GLuint textureName;
+	//	const GLsizei width = 500;
+	//	const GLsizei height = 512;
+
+	//	//std::vector<float> imgData(&testPixelData[0], &testPixelData[500*512]);
+
+	//	GLbyte textureData[width * height * 3];
+
+	//	for (int i = 0; i < width*height*3;i+=3)
+	//	{
+	//		textureData[i] = testPixelData[i/3];
+	//		textureData[i+1] = testPixelData[i / 3];
+	//		textureData[i+2] = testPixelData[i / 3];
+	//	}
+
+	//	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, textureData);
+	//	glGenerateMipmap(GL_TEXTURE_2D);
+
+	//	//SDL_FreeSurface(image);
+	//	glBindTexture(GL_TEXTURE_2D, 0); // Unbind texture when done, so we won't accidentily mess up our texture.
 
 
-		SDL_StopTextInput();
+	//	SDL_Event e;
+	//	SDL_StartTextInput();
+	//	int test;
+	//	float val = 0.0f;
+	//	bool quit = false;
 
-		// Properly de-allocate all resources once they've outlived their purpose
+	//	glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 3.0f);
+	//	glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
+	//	glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
+
+	//	GLfloat cameraSpeed = 0.05f;
+	//	SDL_Keycode currentCode;
+
+	//	bool firstMouse = true;
+	//	int xpos, ypos;
+
+	//	GLfloat yaw = -90.0f;	// Yaw is initialized to -90.0 degrees since a yaw of 0.0 results in a direction vector pointing to the right (due to how Eular angles work) so we initially rotate a bit to the left.
+	//	GLfloat pitch = 0.0f;
+	//	GLfloat lastX = 800 / 2.0;
+	//	GLfloat lastY = 600 / 2.0;
+
+	//	float angle = 0.0f;
+
+	//	while (!quit)
+	//	{
+	//		if (SDL_PollEvent(&e) != 0)
+	//		{
+	//			//test = TwEventSDL20(&e, SDL_MAJOR_VERSION, SDL_MINOR_VERSION);
+	//			test = TwEventSDL20(&e);
+
+	//			if (!test) {
+
+	//				if (e.type == SDL_QUIT)
+	//				{
+	//					quit = true;
+	//				}
+	//				else if (e.type == SDL_KEYDOWN && e.key.repeat != 0)
+	//				{
+	//					currentCode = e.key.keysym.sym;
+
+	//					if (currentCode == SDLK_w)
+	//						cameraPos += cameraSpeed * cameraFront;
+	//					if (currentCode == SDLK_s)
+	//						cameraPos -= cameraSpeed * cameraFront;
+	//					if (currentCode == SDLK_a)
+	//						cameraPos -= glm::normalize(
+	//							glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+	//					if (currentCode == SDLK_d)
+	//						cameraPos += glm::normalize(
+	//							glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+	//				}
+	//			}
 
 
-		glDeleteVertexArrays(1, &VAO);
-		glDeleteBuffers(1, &VBO);
-	}
+	//			SDL_GetMouseState(&xpos, &ypos);
+
+	//			if (firstMouse)
+	//			{
+	//				lastX = xpos;
+	//				lastY = ypos;
+	//				firstMouse = false;
+	//			}
+	//			GLfloat xoffset = xpos - lastX;
+	//			GLfloat yoffset = lastY - ypos;
+
+	//			lastX = xpos;
+	//			lastY = ypos;
+
+	//			GLfloat sensitivity = 0.05;
+	//			xoffset *= sensitivity;
+	//			yoffset *= sensitivity;
+
+	//			yaw += xoffset;
+	//			pitch += yoffset;
+
+	//			// Make sure that when pitch is out of bounds, screen doesn't get flipped
+	//			if (pitch > 89.0f)
+	//				pitch = 89.0f;
+	//			if (pitch < -89.0f)
+	//				pitch = -89.0f;
+
+	//			glm::vec3 front;
+	//			front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
+	//			front.y = sin(glm::radians(pitch));
+	//			front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
+	//			//cameraFront = glm::normalize(front);
+	//		}
+
+	//		// Render
+	//		// Clear the color buffer
+	//		glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+	//		glClear(GL_COLOR_BUFFER_BIT);
+
+	//		// Bind Textures using texture units
+	//		glActiveTexture(GL_TEXTURE0);
+	//		glBindTexture(GL_TEXTURE_2D, texture);
+	//		glUniform1i(glGetUniformLocation(ourShader.Program, "ourTexture1"), 0);
+
+	//		// Activate shader
+	//		ourShader.Enable();
+
+	//		// Create transformations
+	//		glm::mat4 model;
+	//		glm::mat4 view;
+	//		glm::mat4 projection;
+
+	//		model = glm::rotate(model, -45.0f, glm::vec3(1.0f, 0.0f, 0.0f));
+
+	//		angle = (400.0f - xpos);
+	//		angle = angle / 360.0f * M_PI * 1.0f;
+	//		model = glm::rotate(model, angle, glm::vec3(0.0f, 0.0f, 1.0f));
+
+	//		view = glm::translate(view, glm::vec3(0.0f, 0.0f, -2.0f));
+	//		projection = glm::perspective(70.0f, (GLfloat)800 / (GLfloat)600, 0.1f, 100.0f);
+	//		// Get their uniform location
+	//		GLint modelLoc = glGetUniformLocation(ourShader.Program, "model");
+	//		GLint viewLoc = glGetUniformLocation(ourShader.Program, "view");
+	//		GLint projLoc = glGetUniformLocation(ourShader.Program, "projection");
+	//		// Pass them to the shaders
+	//		glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+	//		glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
+	//		// Note: currently we set the projection matrix each frame, but since the projection matrix rarely changes it's often best practice to set it outside the main loop only once.
+	//		glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
+
+	//		// Draw container
+	//		glBindVertexArray(VAO);
+	//		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+	//		glBindVertexArray(0);
+
+	//		TwDraw();
+
+	//		SDL_GL_SwapWindow(engine.EngineWindow);
+
+	//		//engine.Render();
+	//	}
 
 
-	// Terminate AntTweakBar
-	TwTerminate();
+	//	SDL_StopTextInput();
+	//	// Properly de-allocate all resources once they've outlived their purpose
+	//	glDeleteVertexArrays(1, &VAO);
+	//	glDeleteBuffers(1, &VBO);
+	//}
 
-	engine.~EngineRenderer();
+
+	//// Terminate AntTweakBar
+	//TwTerminate();
+
+	//engine.~EngineRenderer();
+
 }
 
 //
@@ -782,7 +780,7 @@ int clOCTCompileKernels(char* sourceFile, char* build_log,
 	if (sourceLength < 0)
 		return sourceLength;
 	//
-	// Use the openCL library to create a program from the source code
+	// Enable the openCL library to create a program from the source code
 	//
 	_clOCTProgram = clCreateProgramWithSource(_context, 1, (const char**)&kernelSource, NULL, &err);
 	if (err != CL_SUCCESS)
@@ -850,7 +848,7 @@ int clBuild(char* sourceFile, char* buildLog, size_t* buildLogLength)
 {
 	//
 	// Test code to check the expected output from openCL library functions
-	// Use this to check correct outputs in C# wrapper functions
+	// Enable this to check correct outputs in C# wrapper functions
 	//
 	//	cl_uint i;
 	size_t logLen = 0;
@@ -1001,7 +999,7 @@ void PreComputeInterpolationCoefficients(float* resamplingTable, float* coefs,
 	int ResamplingTableLength)
 {
 	//
-	// Use a quadratic interpolation
+	// Enable a quadratic interpolation
 	// Therefore, a curve is defined by three points, requiring the calculation of 9 coefficients.
 	//
 	int i, j;
@@ -2292,14 +2290,14 @@ void EngineOCT::OpenCLCompute()
 	printf("CL compute Done.\n");
 }
 
-int main(int argc, char *argv[])
-{
-	EngineOCT engineOCT;
-	engineOCT.LoadOCTData();
-	engineOCT.OpenCLCompute();
-
-	EngineRendering(engineOCT);
-
-	return 0;
-}
+//int main(int argc, char *argv[])
+//{
+//	EngineOCT engineOCT;
+//	engineOCT.LoadOCTData();
+//	engineOCT.OpenCLCompute();
+//
+//	EngineRendering(engineOCT);
+//
+//	return 0;
+//}
 
