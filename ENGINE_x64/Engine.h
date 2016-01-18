@@ -15,8 +15,9 @@ class Engine
 		UI EngineUI;
 		EngineOCT OCT;
 
-		EngineObject* TestObject;
-
+		std::vector<EngineObject*> EngineSlices;
+		int RenderDepth;
+		
 		Engine();
 		~Engine();
 

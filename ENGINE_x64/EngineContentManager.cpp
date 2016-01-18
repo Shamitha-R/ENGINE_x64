@@ -101,8 +101,42 @@ EngineTexture EngineContentManager::LoadTexture(const GLchar* filePath,
 	EngineTexture tempTexture;
 
 	SDL_Surface* image = LoadSurface("textures/wall.png");
-	tempTexture.Generate(image->w, image->h, image);
+	tempTexture.Generate(image->w, image->h, (char*)image->pixels);
 	SDL_FreeSurface(image);
+
+	ETextures[textureName] = tempTexture;
+	return tempTexture;
+}
+
+EngineTexture EngineContentManager::CreateTexture(std::vector<float> textureData, std::string textureName,
+	int depthLayer)
+{
+	EngineTexture tempTexture;
+
+	//TODO Change to Heap
+	GLchar textureData2[500 * 499 * 4];
+	std::fill_n(textureData2, 500 * 499 * 4, 255);
+
+	for (int row = 0; row < 499; row++) {
+		for (int col = 0; col < 500 * 4; col += 4)
+		{
+			int val = textureData[(col / 4) + (row * 500 * 512) + (depthLayer * 500)];
+			
+			textureData2[(col+(row * 500 * 4))] = val;
+			textureData2[(col+(row * 500 * 4)) + 1] = val;
+			textureData2[(col+(row * 500 * 4)) + 2] = val;
+
+			int alpha = 0;
+			if (val > 50)
+				alpha = 255;
+			else
+				alpha = val;
+
+			textureData2[(col + (row * 500 * 4)) + 3] = 255;
+		}
+	}
+
+	tempTexture.Generate(500, 499, textureData2);
 
 	ETextures[textureName] = tempTexture;
 	return tempTexture;

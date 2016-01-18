@@ -115,74 +115,8 @@ void EngineOCT::LoadOCTData()
 //	glEnd();
 //}
 
-std::vector<float> testPixelData;
 void EngineRendering(EngineOCT &oct)
-{
-	//EngineRenderer engine;
-
-	//if (!engine.InitializeEngine())
-	//{
-	//	printf("Engine Initialization Failed\n");
-	//}
-	//else
-	//{
-	//	UI engineUI;
-	//	engineUI.InitialiseUI(engine.SCREENWIDTH, engine.SCREENHEIGHT, oct);
-
-	//	//setupTexture();
-
-	//   //Build and compile our shader program
-	//    EngineShader ourShader("./shaders/vertexshader.vs",
-	//		"./shaders/fragmentshader.fs");
-
-	//	//const int particleCount = 500;
-	//	//const int depth = 512;
-	//	//const int scanCount = 10;
-	//	//const int scanSize = depth * (particleCount*8);
-
-	//	//// Set up vertex data (and buffer(s)) and attribute pointers
-	//	//std::vector<GLfloat> vertices(particleCount*8*depth*scanCount);
-
-	//	//for (int scanNo = 0; scanNo < scanCount; scanNo++) {
-	//	//	for (int j = 0; j < depth; j++) {
-	//	//		for (int i = 0; i < (particleCount * 8); i += 8)
-	//	//		{
-	//	//			//Position
-	//	//			vertices[i + (j*particleCount * 8) + (scanNo * scanSize)] = 
-	//	//				(((scanNo*1.0f)/(scanCount*1.0f))*0.5f);
-	//	//			vertices[i + (j*particleCount * 8) + 1 + (scanNo * scanSize)] = 
-	//	//				-0.5f + ((i / (500.0f*8.0f))*1.0f);
-	//	//			float det = 0.8f - (((j*1.0f) / (depth*1.0f))*1.0f);
-	//	//			vertices[i + (j*particleCount * 8) + 2 + (scanNo * scanSize)] = det;
-	//	//			//Colours
-	//	//			vertices[i + (j*particleCount * 8) + 3 + (scanNo * scanSize)] = 
-	//	//				(testPixelData[(j*particleCount)
-	//	//				+ (i / 8) + (scanNo * depth * particleCount)] / 255 * 1.0f);
-	//	//			vertices[i + (j*particleCount * 8) + 4 + (scanNo * scanSize)] = 
-	//	//				(testPixelData[(j*particleCount)
-	//	//				+ (i / 8) + (scanNo * depth * particleCount)] / 255 * 1.0f);
-	//	//			vertices[i + (j*particleCount * 8) + 5 + (scanNo * scanSize)] = 
-	//	//				(testPixelData[(j*particleCount)
-	//	//				+ (i / 8) + (scanNo * depth * particleCount)] / 255 * 1.0f);
-	//	//			//Tex Cords
-	//	//			vertices[i + (j*particleCount * 8) + 6 + (scanNo * scanSize)] = 0.0f;
-	//	//			vertices[i + (j*particleCount * 8) + 7 + (scanNo * scanSize)] = 0.0f;
-	//	//		}
-	//	//	}
-	//	//}
-	//	//
-
-	//	//std::vector<GLuint> indices(particleCount*depth*scanCount);
-
-	//	//for (int i = 0; i < particleCount*depth*scanCount; i++)
-	//	//{
-	//	//	indices[i] = i;
-	//	//}
-
-	//	//glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * vertices.size(), vertices.data(), 
-	//	//	GL_STATIC_DRAW);
-
-
+{	
 	//	// Set up vertex data (and buffer(s)) and attribute pointers
 	//	GLfloat vertices[] = {
 	//		// Positions          // Colors           // Texture Coords
@@ -1291,7 +1225,7 @@ int PreProcess(short* hostSpectra, int windowType)
 	return 0;
 }
 
-int ComputeCorrelation(int batchNum, int batchSize)
+int ComputeCorrelation(int batchNum, int batchSize,std::vector<float>& correlationResults)
 {
 	bool saveBMP = true;
 	cl_int err;
@@ -1311,7 +1245,8 @@ int ComputeCorrelation(int batchNum, int batchSize)
 
 	std::vector<float> results(correlationMap, correlationMap + (totalWorkItems*batchSize));
 
-	testPixelData = results;
+	correlationResults.insert(correlationResults.end(), results.begin(), 
+		results.end() - totalWorkItems);
 
 	if (!saveBMP) {
 		for (int bitMapNum = 0; bitMapNum < batchSize - 1; bitMapNum++)
@@ -2193,7 +2128,7 @@ void EngineOCT::OpenCLCompute()
 
 		clock_t begin = clock();
 
-		for (int batchNum = 0; batchNum < 1; batchNum++) {
+		for (int batchNum = 0; batchNum < numBScanProcessingIteratations; batchNum++) {
 
 			printf("Performing Cross Correlation batch %d of %d \n",
 				(batchNum + 1), numBScanProcessingIteratations);
@@ -2251,7 +2186,7 @@ void EngineOCT::OpenCLCompute()
 				NULL,
 				NULL);
 
-			res = ComputeCorrelation(batchNum, batchSizePlus);
+			res = ComputeCorrelation(batchNum, batchSizePlus,this->CorrelationResults);
 
 			delete(tempBScanData);
 		}

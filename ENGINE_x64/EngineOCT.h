@@ -18,6 +18,8 @@ public:
 	std::vector<float> ReferenceSpectrumData;
 	std::vector<short int> HostSpectraData;
 
+	std::vector<float> CorrelationResults;
+
 	const int INPUTSPECTRALENGTH = 1024;
 	const int OUTPUTASCANLENGTH = 1024;
 	const int BSCANCOUNT = 10;

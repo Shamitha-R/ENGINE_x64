@@ -12,7 +12,7 @@ EngineTexture::~EngineTexture()
 }
 
 void EngineTexture::Generate(GLuint textureWidth, GLuint textureHeight, 
-	SDL_Surface* textureData)
+	GLchar* textureData)
 {
 	this->TextureWidth = textureWidth;
 	this->TextureHeight = textureHeight;
@@ -21,7 +21,7 @@ void EngineTexture::Generate(GLuint textureWidth, GLuint textureHeight,
 
 
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, textureWidth, textureHeight, 0, GL_RGBA,
-		GL_UNSIGNED_BYTE, textureData->pixels);
+		GL_UNSIGNED_BYTE, textureData);
 	glGenerateMipmap(GL_TEXTURE_2D);
 
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);

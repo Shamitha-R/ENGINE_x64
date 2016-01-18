@@ -103,7 +103,6 @@ Engine::~Engine()
 	TwTerminate();
 
 	EngineContentManager::FreeResources();
-
 }
 
 void Engine::InitalizeEngine()
@@ -113,27 +112,41 @@ void Engine::InitalizeEngine()
 	else {
 		UI engineUI;
 
-		engineUI.InitialiseUI(this->Renderer.SCREENWIDTH, 
-			this->Renderer.SCREENHEIGHT,OCT);
+		engineUI.InitialiseUI(this->Renderer.SCREENWIDTH, this->Renderer.SCREENHEIGHT,OCT);
 
 		EngineContentManager::LoadShader("./shaders/vertexshader.vs",
 			"./shaders/fragmentshader.fs",nullptr,"sprite");
 
 		glm::mat4 projection;
-		projection = glm::perspective(75.0f, (GLfloat)800 / (GLfloat)600, 
-			0.1f, 100.0f);
+		glm::mat4 view;
+		view = glm::translate(view, glm::vec3(0.0f, 0.0f, -4.0f));
+		projection = glm::perspective(75.0f, (GLfloat)800 / (GLfloat)600, 0.1f, 100.0f);
 		
 		EngineContentManager::EShaders["sprite"].Enable().SetInteger("image", 0);
+		EngineContentManager::EShaders["sprite"].SetMatrix4("view", view);
 		EngineContentManager::EShaders["sprite"].SetMatrix4("projection", projection);
 
-		EngineContentManager::LoadTexture("null", "testTex");
+		//EngineContentManager::LoadTexture("null", "testTex");
 
-		TestObject = new EngineObject(EngineContentManager::EShaders["sprite"],
-			EngineContentManager::ETextures["testTex"],
-			glm::vec3(0.0, 0.0,-8),
-			glm::vec2(1, 1),
-			45.0f,
-			glm::vec3(1.0f, 1.0f,1.0f));
+		int imgCount = 100;
+
+		for (int corrImage = 0; corrImage < imgCount;corrImage++)
+		{
+			std::string textureName = "tex" + std::to_string(corrImage);
+			EngineContentManager::CreateTexture(OCT.CorrelationResults, textureName, corrImage);
+
+			EngineObject* testObject = new EngineObject(EngineContentManager::EShaders["sprite"],
+				EngineContentManager::ETextures[textureName],
+				glm::vec3(0.0, +((corrImage*1.0f) / (imgCount*1.0f))*0.5f,
+					0.5f-((corrImage*1.0f)/(imgCount*1.0f)))*0.5f,
+				glm::vec2(1, 1),
+				45.0f,
+				glm::vec3(1.0f, 1.0f, 1.0f));
+			EngineSlices.push_back(testObject);
+
+		}
+
+		RenderDepth = 15;
 	}
 }
 
@@ -149,25 +162,40 @@ void Engine::UpdateEngine(GLfloat engineTime)
 			{
 				this->TerminateEngine = true;
 			}
-			else if (this->EngineEvent.type == SDL_KEYDOWN && 
-				this->EngineEvent.key.repeat != 0)
+			else if (this->EngineEvent.type == SDL_KEYDOWN &&
+				this->EngineEvent.key.repeat == 0)
 			{
+				switch (this->EngineEvent.key.keysym.sym) {
+				case SDLK_q:
+					if(RenderDepth < EngineSlices.size()-1)
+						RenderDepth += 1;
+					break;
+				case SDLK_w:
+					if (RenderDepth > 0)
+						RenderDepth -= 1;
+					break;
+				default:
+					break;
+				}
 			}
-		}						
+		}
+		int xpos, ypos;
+		SDL_GetMouseState(&xpos, &ypos);
+		float angle = (400.0f - xpos);
+		angle = angle / 360.0f * M_PI * 1.0f;
+
+		for (int i = 0; i < EngineSlices.size(); i++)
+			EngineSlices[i]->ObjectRotation = angle;
 	}
-	int xpos, ypos;
-	SDL_GetMouseState(&xpos, &ypos);
-	float angle = (400.0f - xpos);
-	angle = angle / 360.0f * M_PI * 1.0f;
-	TestObject->ObjectRotation = angle;
 }
 
 void Engine::RenderEngine()
 {
 	glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
-	glClear(GL_COLOR_BUFFER_BIT);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	TestObject->Render(EngineContentManager::ETextures["testTex"]);
+	for (int i = EngineSlices.size()-1; i >= RenderDepth; i--)
+		EngineSlices[i]->Render();
 
 	TwDraw();
 
@@ -178,10 +206,11 @@ int main(int argc, char *argv[])
 {
 	Engine engine;
 
+	engine.OCT.LoadOCTData();
+	engine.OCT.OpenCLCompute();
+
 	engine.InitalizeEngine();
-	//engine.OCT.LoadOCTData();
-	//engine.OCT.OpenCLCompute();
-	
+
 	engine.TerminateEngine = false;
 
 	while(!engine.TerminateEngine)

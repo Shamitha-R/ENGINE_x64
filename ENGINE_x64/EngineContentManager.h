@@ -3,6 +3,7 @@
 #include <map>
 #include <SDL.h>
 #include <SDL_image.h>
+#include <vector>
 
 class EngineContentManager
 {
@@ -14,6 +15,8 @@ public:
 		const GLchar* geometryPath, std::string shaderName);
 
 	static EngineTexture LoadTexture(const GLchar* filePath, std::string textureName);
+
+	static EngineTexture CreateTexture(std::vector<float> textureData, std::string textureName, int depthLayer);
 
 	static void FreeResources();
 
