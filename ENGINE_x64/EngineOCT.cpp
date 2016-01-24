@@ -6,7 +6,7 @@
 
 #define NUM_PLATFORMS 1
 #define NUM_DEVICES 2
-#define SELECTED_PLATFORM 2
+#define SELECTED_PLATFORM 0
 #define MAX_PROGRAM_FILE_LENGTH 10240000
 #define DEVICE_INFO_RETURN_SIZE 1024
 #define NUM_DEVICES_TO_BUILD_FOR 1	// Number of devices to build a program for - should be 1, just build for the main GPU
@@ -2042,7 +2042,7 @@ void EngineOCT::OpenCLCompute()
 	{
 		printf("Processing %i B-Scans in batches of %i, each batch comprising %i A-Scans...\n",
 			totalBScans, numBScansPerBatch, totalAScans);
-		std::vector<unsigned char> bitmapData;
+
 		for (i = 0; i < numBScanProcessingIteratations; i++)
 		{
 			//
@@ -2096,7 +2096,7 @@ void EngineOCT::OpenCLCompute()
 
 				std::vector<unsigned char> tempBMPDat(bscanBmp,
 					bscanBmp + (totalBScanSize * numBScansPerBatch));
-				bitmapData.insert(bitmapData.end(), tempBMPDat.begin(), tempBMPDat.end());
+				BScanResults.insert(BScanResults.end(), tempBMPDat.begin(), tempBMPDat.end());
 
 				printf("\n");
 				//for (j = 0; j < 10; j++)
@@ -2151,8 +2151,8 @@ void EngineOCT::OpenCLCompute()
 				int index00 = (_numBScans * batchNum);
 				int index01 = (_numBScans * (batchNum + 1));
 
-				std::copy(bitmapData.begin() + (index00 * 512 * 500 * 3),
-					bitmapData.begin() + (index01 * 512 * 500 * 3),
+				std::copy(BScanResults.begin() + (index00 * 512 * 500 * 3),
+					BScanResults.begin() + (index01 * 512 * 500 * 3),
 					tempBScanData);
 
 			}
@@ -2168,8 +2168,8 @@ void EngineOCT::OpenCLCompute()
 				int index00 = (_numBScans * batchNum);
 				int index01 = (_numBScans * (batchNum + 1)) + 1;
 
-				std::copy(bitmapData.begin() + (index00 * 512 * 500 * 3),
-					bitmapData.begin() + (index01 * 512 * 500 * 3),
+				std::copy(BScanResults.begin() + (index00 * 512 * 500 * 3),
+					BScanResults.begin() + (index01 * 512 * 500 * 3),
 					tempBScanData);
 
 			}

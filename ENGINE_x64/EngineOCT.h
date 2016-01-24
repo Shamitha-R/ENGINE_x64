@@ -19,6 +19,7 @@ public:
 	std::vector<short int> HostSpectraData;
 
 	std::vector<float> CorrelationResults;
+	std::vector<float> BScanResults;
 
 	const int INPUTSPECTRALENGTH = 1024;
 	const int OUTPUTASCANLENGTH = 1024;

@@ -1,5 +1,8 @@
 #include "Engine.h"
 #include "EngineContentManager.h"
+#include <algorithm>
+#include <functional>
+#include <numeric>
 
 int TW_CALL TwEventSDL20(const void *sdlEvent)
 {
@@ -105,6 +108,248 @@ Engine::~Engine()
 	EngineContentManager::FreeResources();
 }
 
+void TestBMP(std::vector<float> &data)
+{
+	std::vector<std::vector<float>> corrCoeff;
+	for (int row = 0; row < 512; row++)
+	{
+		std::vector<float> rowData00;
+
+		for (int col = 0; col < (500*3); col += 3)
+		{
+			rowData00.push_back(data[col + (500 * row * 3)]);
+		}
+		corrCoeff.push_back(rowData00);
+	}
+
+	int w = 500;
+	int h = 512;
+
+	FILE *f = nullptr;
+	if (f)
+		free(f);
+
+	unsigned char *img = NULL;
+	int filesize = 54 + 3 * w*h;  //w is your image width, h is image height, both int
+	if (img)
+		free(img);
+	img = (unsigned char *)malloc(3 * w*h);
+	memset(img, 0, sizeof(img));
+
+	for (int xCor = 0; xCor < w; xCor++)
+	{
+		for (int yCor = 0; yCor < h; yCor++)
+		{
+			int x = xCor;
+			int y = (h - 1) - yCor;
+			int r = corrCoeff[yCor][xCor];
+			int g = corrCoeff[yCor][xCor];
+			int b = corrCoeff[yCor][xCor];
+			if (r > 255) r = 255;
+			if (g > 255) g = 255;
+			if (b > 255) b = 255;
+			img[(x + y*w) * 3 + 2] = (unsigned char)(r);
+			img[(x + y*w) * 3 + 1] = (unsigned char)(g);
+			img[(x + y*w) * 3 + 0] = (unsigned char)(b);
+		}
+	}
+
+	unsigned char bmpfileheader[14] = { 'B','M', 0,0,0,0, 0,0, 0,0, 54,0,0,0 };
+	unsigned char bmpinfoheader[40] = { 40,0,0,0, 0,0,0,0, 0,0,0,0, 1,0, 24,0 };
+	unsigned char bmppad[3] = { 0,0,0 };
+
+	bmpfileheader[2] = (unsigned char)(filesize);
+	bmpfileheader[3] = (unsigned char)(filesize >> 8);
+	bmpfileheader[4] = (unsigned char)(filesize >> 16);
+	bmpfileheader[5] = (unsigned char)(filesize >> 24);
+
+	bmpinfoheader[4] = (unsigned char)(w);
+	bmpinfoheader[5] = (unsigned char)(w >> 8);
+	bmpinfoheader[6] = (unsigned char)(w >> 16);
+	bmpinfoheader[7] = (unsigned char)(w >> 24);
+	bmpinfoheader[8] = (unsigned char)(h);
+	bmpinfoheader[9] = (unsigned char)(h >> 8);
+	bmpinfoheader[10] = (unsigned char)(h >> 16);
+	bmpinfoheader[11] = (unsigned char)(h >> 24);
+
+
+	std::string str = "./results/aaaaaaaa" +
+		std::to_string(6)
+		+ ".bmp";
+	const char* gfgfg = str.c_str();
+
+	f = fopen(gfgfg, "wb");
+	fwrite(bmpfileheader, 1, 14, f);
+	fwrite(bmpinfoheader, 1, 40, f);
+	for (int imgIndex = 0; imgIndex < h; imgIndex++)
+	{
+		fwrite(img + (w*(imgIndex - 1) * 3), 3, w, f);
+		fwrite(bmppad, 1, (4 - (w * 3) % 4) % 4, f);
+	}
+
+	free(img);
+
+	fclose(f);
+
+}
+
+std::vector<float> RemoveNoise(std::vector<float> &bScan00,std::vector<float> &bScan01,std::vector<float> &corrResult)
+{
+	//Average the 2 Bscans
+	std::vector<float> originalBScan;
+	std::transform(bScan00.begin(), bScan00.end(), bScan01.begin(),
+		std::back_inserter(originalBScan), std::plus<float>());
+	std::transform(originalBScan.begin(), originalBScan.end(), originalBScan.begin(),
+		std::bind1st(std::multiplies<float>(), 0.5f));
+	//Median Filtering (3X3 filter kernel)
+
+	float window[9];
+
+	for (int row = 0; row < (512-(3-1));row++)
+	{
+		for (int col = 0; col < (500-(3-1)); col++)
+		{
+			window[0] = originalBScan[(col*3) + (row*500*3)];
+			window[1] = originalBScan[(col * 3) + (1*3) + (row * 500 * 3)];
+			window[2] = originalBScan[(col * 3) + (2*3) + (row * 500 * 3)];
+
+			window[3] = originalBScan[(col * 3) + ((500) * 3) + (row * 500 * 3)];
+			window[4] = originalBScan[(col * 3) + ((500) * 3) +(1*3) + (row * 500 * 3)];
+			window[5] = originalBScan[(col * 3) + ((500) * 3) +(2*3) + (row * 500 * 3)];
+
+			window[6] = originalBScan[(col * 3) + ((500 + 500) * 3) + (row * 500 * 3)];
+			window[7] = originalBScan[(col * 3) + ((500 + 500) * 3) + (1*3) + (row * 500 * 3)];
+			window[8] = originalBScan[(col * 3) + ((500 + 500) * 3) +(2*3) + (row * 500 * 3)];
+
+			//Insertion sort elements
+			int temp, i, j;
+			for (i = 0; i < 9; i++) {
+				temp = window[i];
+				for (j = i - 1; j >= 0 && temp < window[j]; j--) {
+					window[j + 1] = window[j];
+				}
+				window[j + 1] = temp;
+			}
+
+			//Assign the median value
+			originalBScan[(col * 3) + ((500) * 3) + (3) + (row * 500 * 3)] = window[4];
+			originalBScan[(col * 3) + ((500) * 3) + (4) + (row * 500 * 3)] = window[4];
+			originalBScan[(col * 3) + ((500) * 3) + (5) + (row * 500 * 3)] = window[4];
+		}
+	}
+
+	std::vector<float> avgBScan = originalBScan;
+
+	//Threshold BScan
+	int topIgnoreSize = 15 * 500 * 3;
+	int dataIgnoreSize = 199 * 500 * 3;
+
+	std::vector<float> noiseDataBScan;
+
+	for (int i = 0; i < 51;i++)
+	{
+		noiseDataBScan.insert(noiseDataBScan.end(),
+			&avgBScan[((i*500*3) + topIgnoreSize + dataIgnoreSize)], 
+			&avgBScan[((i*500*3) + topIgnoreSize + dataIgnoreSize) + (499*3)]);
+	}
+
+	double sumBScan = std::accumulate(noiseDataBScan.begin(), noiseDataBScan.end(), 0.0);
+	double meanBScan = sumBScan / noiseDataBScan.size();
+
+	std::vector<double> diff(noiseDataBScan.size());
+	std::transform(noiseDataBScan.begin(), noiseDataBScan.end(), diff.begin(),
+		std::bind2nd(std::minus<double>(), meanBScan));
+	double sq_sum = std::inner_product(diff.begin(), diff.end(), diff.begin(), 0.0);
+	double stdevBScan = std::sqrt(sq_sum / noiseDataBScan.size());
+
+	float noiseFloorBScan = meanBScan + 3 * stdevBScan;
+
+	std::replace_if(avgBScan.begin(), avgBScan.end(),
+		[noiseFloorBScan](float value)
+	{
+		if (value < noiseFloorBScan)
+			return true;
+		else
+			return false;
+	}, 0);
+
+	//Threshold correlation Map
+	//std::replace_if(corrResult.begin(), corrResult.end(),
+	//	[](float value)
+	//{
+	//	if (value > 255)
+	//		return true;
+	//	else
+	//		return false;
+	//}, 255);
+
+	int topIgnoreCorr = 5 * 500;
+
+	std::vector<float> noiseDataCorr;
+
+	for (int i = 0; i < 10; i++)
+	{
+		noiseDataCorr.insert(noiseDataCorr.end(),
+			&corrResult[(i * 500) + topIgnoreCorr],
+			&corrResult[((i * 500) + topIgnoreCorr) + (499)]);
+	}
+
+
+	double sumCorr = std::accumulate(noiseDataCorr.begin(), noiseDataCorr.end(), 0.0f);
+	double meanCorr = sumCorr / noiseDataCorr.size();
+
+	std::replace_if(corrResult.begin(),corrResult.end(),
+	[meanCorr](float value)
+	{
+		if (value < meanCorr)
+			return true;
+		else
+			return false;
+	}
+	, 0);
+
+	//Now use the B-Scan to filter only the areas of the correlation map
+	//that are contributed to by actual OCT signal rather than  noise.
+	for (int i = 0; i < corrResult.size();i++)
+	{
+		if (avgBScan[i * 3] == 0)
+			corrResult[i] = 0;
+	}
+
+	//The filtered cmOCT gives the location of the vasculature
+	//Now extract the corresponding regions from the original OCT data
+	std::vector<float> vasculature = originalBScan;
+
+	for (int i = 0; i < corrResult.size(); i++)
+	{
+		if (corrResult[i] == 0)
+			vasculature[i*3] = 0;
+	}
+
+	//*********************************** Compositing *******************************************
+	std::vector<float> composite(500*512*3);
+
+	for (int i = 0; i < (500*512);i++)
+	{
+		if (vasculature[i * 3] > 0) {
+			composite[i * 3] = vasculature[i * 3];
+			composite[(i * 3) + 1] = 0;
+			composite[(i * 3) + 2] = 0;
+		}else
+		{
+			composite[i * 3] = originalBScan[i * 3];
+			composite[(i * 3) + 1] = originalBScan[(i * 3) + 1];
+			composite[(i * 3) + 2] = originalBScan[(i * 3) + 2];
+		}
+	}
+
+	//Remove top area
+	std::vector<float> result(composite.begin() + topIgnoreSize, composite.end());
+
+	return composite;
+}
+
+
 void Engine::InitalizeEngine()
 {
 	if (!this->Renderer.InitializeEngine())
@@ -119,7 +364,7 @@ void Engine::InitalizeEngine()
 
 		glm::mat4 projection;
 		glm::mat4 view;
-		view = glm::translate(view, glm::vec3(0.0f, 0.0f, -4.0f));
+		view = glm::translate(view, glm::vec3(0.0f, 1.0f, -6.0f));
 		projection = glm::perspective(75.0f, (GLfloat)800 / (GLfloat)600, 0.1f, 100.0f);
 		
 		EngineContentManager::EShaders["sprite"].Enable().SetInteger("image", 0);
@@ -128,25 +373,39 @@ void Engine::InitalizeEngine()
 
 		//EngineContentManager::LoadTexture("null", "testTex");
 
-		int imgCount = 100;
+		int imgCount = 498;
+		int imgSize = 500 * 512 * 3;
 
 		for (int corrImage = 0; corrImage < imgCount;corrImage++)
 		{
+			printf("Rendering Sllice: %d\n", corrImage);
+
 			std::string textureName = "tex" + std::to_string(corrImage);
-			EngineContentManager::CreateTexture(OCT.CorrelationResults, textureName, corrImage);
+
+			std::vector<float>  bScanDat00(&OCT.BScanResults[0 + (corrImage * imgSize)], 
+				&OCT.BScanResults[500*512*3 + (corrImage * imgSize)]);
+			std::vector<float>  bScanDat01(&OCT.BScanResults[500 * 512 * 3 + (corrImage * imgSize)],
+				&OCT.BScanResults[((500 * 512 * 3) * 2) + (corrImage * imgSize)]);
+			std::vector<float>  corrDat(&OCT.CorrelationResults[0 + (corrImage * 500 * 512)],
+				&OCT.CorrelationResults[500 * 512 + (corrImage * 500 * 512)]);
+
+			std::vector<float> filteredTexData = RemoveNoise(bScanDat00,bScanDat01, corrDat);
+
+			EngineContentManager::CreateTexture(filteredTexData, textureName, corrImage);
 
 			EngineObject* testObject = new EngineObject(EngineContentManager::EShaders["sprite"],
 				EngineContentManager::ETextures[textureName],
-				glm::vec3(0.0, +((corrImage*1.0f) / (imgCount*1.0f))*0.5f,
-					0.5f-((corrImage*1.0f)/(imgCount*1.0f)))*0.5f,
+				glm::vec3(0,
+					0,
+					((corrImage*1.0f) / (imgCount*1.0f))*1.1f),
 				glm::vec2(1, 1),
-				45.0f,
+				0,
 				glm::vec3(1.0f, 1.0f, 1.0f));
 			EngineSlices.push_back(testObject);
 
 		}
 
-		RenderDepth = 15;
+		RenderDepth = 0;
 	}
 }
 
@@ -191,10 +450,10 @@ void Engine::UpdateEngine(GLfloat engineTime)
 
 void Engine::RenderEngine()
 {
-	glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	for (int i = EngineSlices.size()-1; i >= RenderDepth; i--)
+	for (int i = RenderDepth; i < EngineSlices.size(); i++)
 		EngineSlices[i]->Render();
 
 	TwDraw();
