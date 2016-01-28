@@ -409,6 +409,8 @@ cl_kernel _preProcessingKernel;
 cl_kernel _postProcessingKernel;
 cl_kernel _imageKernel;
 cl_kernel corrKernel;
+cl_kernel filterKernel;
+cl_kernel avgKernel;
 
 cl_mem deviceSpectra;					// Input array of spectra that make up a single B-Scan
 cl_mem bScanCorrData;
@@ -426,6 +428,10 @@ cl_mem deviceSum;
 cl_mem deviceSAM;
 cl_mem deviceAttenuationDepth;
 cl_mem deviceBScanBmp;
+
+cl_mem deviceFilterResults;
+cl_mem deviceAvgResults;
+
 
 char* clOCTLoadKernelSourceFromFile(char* sourceFile, unsigned int* len)
 {
@@ -630,6 +636,8 @@ int clAlloc(
 	if (err != CL_SUCCESS)
 		return err;
 
+
+
 	//
 	// Copy the resampling table, reference spectrum and reference a-scan immediately (no need to call enqueuewritebuffer)
 	// using the CL_MEM_COPY_HOST_PTR flag
@@ -683,6 +691,18 @@ int clAlloc(
 	if (err != CL_SUCCESS)
 		return err;
 	deviceBScanBmp = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(unsigned char) * _bitmapBScanVolumeSize, NULL, &err);	// BScan bitmap images
+	if (err != CL_SUCCESS)
+		return err;
+
+	//filterResults
+	deviceFilterResults = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(float)*(512 * 500 * (numBScans + 1)),
+		NULL, &err);	// Correlation map
+	if (err != CL_SUCCESS)
+		return err;
+
+	//filterResults
+	deviceAvgResults = clCreateBuffer(context, CL_MEM_READ_WRITE,
+		sizeof(float)*(512 * 500*(numBScans+1)),NULL, &err);	// Correlation map
 	if (err != CL_SUCCESS)
 		return err;
 
@@ -764,6 +784,12 @@ int clOCTCompileKernels(char* sourceFile, char* build_log,
 	if (err != CL_SUCCESS)
 		return err;
 	corrKernel = clCreateKernel(_clOCTProgram, "corrKernel", &err);
+	if (err != CL_SUCCESS)
+		return err;
+	filterKernel = clCreateKernel(_clOCTProgram, "filterKernel", &err);
+	if (err != CL_SUCCESS)
+		return err; 
+	avgKernel = clCreateKernel(_clOCTProgram, "bScanAverage", &err);
 	if (err != CL_SUCCESS)
 		return err;
 	//	_imageKernel = clCreateKernel(_clOCTProgram, "octImageKernel", &err);
@@ -924,6 +950,26 @@ int SetCorrelationParameters()
 	err = clSetKernelArg(corrKernel, 1, sizeof(cl_uint), &totalBScans);
 	if (err != CL_SUCCESS) return err;
 	err = clSetKernelArg(corrKernel, 2, sizeof(cl_mem), &deviceCorrelationMap);
+	if (err != CL_SUCCESS) return err;
+
+	return err;
+}
+int SetFilterParameters()
+{
+	//Filter Kernel
+	cl_int err = 0;
+	err = clSetKernelArg(filterKernel, 0, sizeof(cl_mem), &deviceAvgResults);
+	if (err != CL_SUCCESS) return err;
+	size_t totalBScans = _numBScans;
+	err = clSetKernelArg(filterKernel, 1, sizeof(cl_uint), &totalBScans);
+	if (err != CL_SUCCESS) return err;
+
+	//Avg Kernel Parameters
+	err = clSetKernelArg(avgKernel, 0, sizeof(cl_mem), &bScanCorrData);
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(avgKernel, 1, sizeof(cl_uint), &totalBScans);
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(avgKernel, 2, sizeof(cl_uint), &deviceAvgResults);
 	if (err != CL_SUCCESS) return err;
 
 	return err;
@@ -1109,6 +1155,8 @@ int clOCTInit(cl_uint clDeviceIndex,			// Index in the device list of the OpenCL
 	if (clErr != CL_SUCCESS) return clErr;
 	clErr = SetCorrelationParameters();
 	if (clErr != CL_SUCCESS) return clErr;
+	clErr = SetFilterParameters();
+	if (clErr != CL_SUCCESS) return clErr;
 	//clErr = SetImageKernelParameters();
 	//if (clErr != CL_SUCCESS) return clErr;
 	//
@@ -1221,6 +1269,139 @@ int PreProcess(short* hostSpectra, int windowType)
 	err = clEnqueueNDRangeKernel(_commandQueue, _preProcessingKernel, 1, NULL, &totalWorkItems, &numWorkItemsPerGroup, 0, NULL, NULL);
 	if (err != CL_SUCCESS)
 		return err;
+
+	return 0;
+}
+
+
+void TestBMP(std::vector<float> &data)
+{
+	std::vector<std::vector<float>> corrCoeff;
+	for (int row = 0; row < 512; row++)
+	{
+		std::vector<float> rowData00;
+
+		for (int col = 0; col < (500 * 1); col += 1)
+		{
+			rowData00.push_back(data[col + (500 * row * 1)]);
+		}
+		corrCoeff.push_back(rowData00);
+	}
+
+	int w = 500;
+	int h = 512;
+
+	FILE *f = nullptr;
+	if (f)
+		free(f);
+
+	unsigned char *img = NULL;
+	int filesize = 54 + 3 * w*h;  //w is your image width, h is image height, both int
+	if (img)
+		free(img);
+	img = (unsigned char *)malloc(3 * w*h);
+	memset(img, 0, sizeof(img));
+
+	for (int xCor = 0; xCor < w; xCor++)
+	{
+		for (int yCor = 0; yCor < h; yCor++)
+		{
+			int x = xCor;
+			int y = (h - 1) - yCor;
+			int r = corrCoeff[yCor][xCor];
+			int g = corrCoeff[yCor][xCor];
+			int b = corrCoeff[yCor][xCor];
+			if (r > 255) r = 255;
+			if (g > 255) g = 255;
+			if (b > 255) b = 255;
+			img[(x + y*w) * 3 + 2] = (unsigned char)(r);
+			img[(x + y*w) * 3 + 1] = (unsigned char)(g);
+			img[(x + y*w) * 3 + 0] = (unsigned char)(b);
+		}
+	}
+
+	unsigned char bmpfileheader[14] = { 'B','M', 0,0,0,0, 0,0, 0,0, 54,0,0,0 };
+	unsigned char bmpinfoheader[40] = { 40,0,0,0, 0,0,0,0, 0,0,0,0, 1,0, 24,0 };
+	unsigned char bmppad[3] = { 0,0,0 };
+
+	bmpfileheader[2] = (unsigned char)(filesize);
+	bmpfileheader[3] = (unsigned char)(filesize >> 8);
+	bmpfileheader[4] = (unsigned char)(filesize >> 16);
+	bmpfileheader[5] = (unsigned char)(filesize >> 24);
+
+	bmpinfoheader[4] = (unsigned char)(w);
+	bmpinfoheader[5] = (unsigned char)(w >> 8);
+	bmpinfoheader[6] = (unsigned char)(w >> 16);
+	bmpinfoheader[7] = (unsigned char)(w >> 24);
+	bmpinfoheader[8] = (unsigned char)(h);
+	bmpinfoheader[9] = (unsigned char)(h >> 8);
+	bmpinfoheader[10] = (unsigned char)(h >> 16);
+	bmpinfoheader[11] = (unsigned char)(h >> 24);
+
+
+	std::string str = "./results/aaaaaaaa" +
+		std::to_string(1)
+		+ ".bmp";
+	const char* gfgfg = str.c_str();
+
+	f = fopen(gfgfg, "wb");
+	fwrite(bmpfileheader, 1, 14, f);
+	fwrite(bmpinfoheader, 1, 40, f);
+	for (int imgIndex = 0; imgIndex < h; imgIndex++)
+	{
+		fwrite(img + (w*(imgIndex - 1) * 3), 3, w, f);
+		fwrite(bmppad, 1, (4 - (w * 3) % 4) % 4, f);
+	}
+
+	free(img);
+
+	fclose(f);
+
+}
+
+
+int FilterPostProcess(int batchSize)
+{
+	printf("Performing Post processing on results \n");
+
+	//Calculate BScan Averages
+	cl_int err;
+	size_t numWorkItemsPerGroup = 1;
+	//    size_t numWorkGroups;
+	size_t totalWorkItems = 500 * 512;
+
+	err = clSetKernelArg(avgKernel, 1, sizeof(cl_uint), &batchSize);
+
+	err = clEnqueueNDRangeKernel(_commandQueue, avgKernel, 1, NULL, 
+		&totalWorkItems, &numWorkItemsPerGroup, 0, NULL, NULL);
+	if (err != CL_SUCCESS)
+		return err;
+
+	std::vector<float> avgResults(500*512*(batchSize-1));
+
+	err = clEnqueueReadBuffer(_commandQueue, deviceAvgResults, CL_TRUE, 0, 
+		sizeof(float)*(500 * 512 * (batchSize - 1)), avgResults.data(), 0, NULL, NULL);
+	if (err != CL_SUCCESS) return err;
+
+	//Perform median filtering
+	err = clSetKernelArg(filterKernel, 1, sizeof(cl_uint), &batchSize);
+
+	err = clEnqueueNDRangeKernel(_commandQueue, filterKernel, 1, NULL,
+		&totalWorkItems, &numWorkItemsPerGroup, 0, NULL, NULL);
+	if (err != CL_SUCCESS)
+		return err;
+
+	std::vector<float> filterResults(500 * 512 * (batchSize - 1));
+
+	err = clEnqueueReadBuffer(_commandQueue, deviceAvgResults, CL_TRUE, 0,
+		sizeof(float)*(500 * 512 * (batchSize - 1)), filterResults.data(), 0, NULL, NULL);
+	if (err != CL_SUCCESS) 
+		return err;
+
+	//std::vector<float> dsdss(filterResults.begin(), filterResults.begin() + (500*512));
+	//TestBMP(dsdss);
+
+	//
 
 	return 0;
 }
@@ -1338,6 +1519,8 @@ int ComputeCorrelation(int batchNum, int batchSize,std::vector<float>& correlati
 			}
 		}
 	}
+
+	delete(correlationMap);
 
 	return 0;
 }
@@ -1800,6 +1983,7 @@ int clRelease()
 	clReleaseKernel(_postProcessingKernel);
 	//clReleaseKernel(_imageKernel);
 	clReleaseKernel(corrKernel);
+	clReleaseKernel(filterKernel);
 
 	clReleaseProgram(_clOCTProgram);
 
@@ -2188,8 +2372,13 @@ void EngineOCT::OpenCLCompute()
 
 			res = ComputeCorrelation(batchNum, batchSizePlus,this->CorrelationResults);
 
+			//
+
+			res = FilterPostProcess(batchSizePlus);
+
 			delete(tempBScanData);
 		}
+
 
 		clock_t end = clock();
 

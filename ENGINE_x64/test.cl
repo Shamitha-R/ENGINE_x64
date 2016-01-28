@@ -456,12 +456,77 @@ __kernel void corrKernel(__global unsigned char* bScanData,
 				result = 0;
 			}
 			else {
-				result = fabs(1 - coeff) * 255;
+				result = (1 - fabs(coeff) ) * 255;
 			}
 
 
 			correlationResults[(imageOffset*bScanNum)+kernelID] = result;
 		}
+	}
+}
+
+__kernel void filterKernel(__global float* avgBScanData,
+	const int bScanCount)
+{
+	int bScanNum;
+	int row, col;
+	float val = 0.0f;
+	int imgSize = 500 * 512;
+	int kernelID = get_global_id(0);
+	float window[9];
+
+	row = kernelID / 500;
+	col = kernelID - (row * 500);
+
+
+	if (col < (500 - (3 - 1)) &&
+		row < (512 - (3 - 1))) {
+
+		for (bScanNum = 0; bScanNum < bScanCount - 1; bScanNum++) {
+
+			window[0] = avgBScanData[col + (row * 500) + (bScanNum*imgSize)];
+			window[1] = avgBScanData[col + (row * 500) + 1 + (bScanNum*imgSize)];
+			window[2] = avgBScanData[col + (row * 500) + 2 + (bScanNum*imgSize)];
+
+			window[3] = avgBScanData[col + (row * 500) + (500) + (bScanNum*imgSize)];
+			window[4] = avgBScanData[col + (row * 500) + (500) + 1 + (bScanNum*imgSize)];
+			window[5] = avgBScanData[col + (row * 500) + (500) + 2 + (bScanNum*imgSize)];
+
+			window[6] = avgBScanData[col + (row * 500) + (500 * 2) + (bScanNum*imgSize)];
+			window[7] = avgBScanData[col + (row * 500) + (500 * 2) + 1 + (bScanNum*imgSize)];
+			window[8] = avgBScanData[col + (row * 500) + (500 * 2) + 2 + (bScanNum*imgSize)];
+
+			int temp, i, j;
+			for (i = 0; i < 9; i++) {
+				temp = window[i];
+				for (j = i - 1; j >= 0 && temp < window[j]; j--) {
+					window[j + 1] = window[j];
+				}
+				window[j + 1] = temp;
+			}
+
+			avgBScanData[kernelID + (500) + 1 + (bScanNum*imgSize)] =
+				window[4];
+		}
+	}
+
+}
+
+__kernel void bScanAverage(__global unsigned char* bScanData,
+	const int bScanCount,
+	__global float* avgResults)
+{ 
+	int bScanNum;
+	float val = 0.0f;
+	int imgSize = 500 * 512;
+	int kernelID = get_global_id(0);
+
+	for (bScanNum = 0; bScanNum < bScanCount -1; bScanNum++){
+
+		val = (bScanData[(bScanNum*imgSize) + (kernelID*3)] +
+			bScanData[(bScanNum*imgSize*2) + (kernelID * 3)])/2.0f;
+
+		avgResults[ (bScanNum*imgSize) + kernelID] = val;
 	}
 }
 
