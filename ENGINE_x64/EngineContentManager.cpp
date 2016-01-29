@@ -113,7 +113,7 @@ EngineTexture EngineContentManager::CreateTexture(std::vector<float> textureData
 {
 	EngineTexture tempTexture;
 
-	//TODO Change to Heap
+	//////TODO Change to Heap
 	GLchar textureData2[500 * (512) * 4];
 	std::fill_n(textureData2, 500 * 512 * 4, 255);
 
@@ -122,6 +122,7 @@ EngineTexture EngineContentManager::CreateTexture(std::vector<float> textureData
 		textureData2[(i * 4)] = textureData[(i * 3)];
 		textureData2[(i * 4)+1] = textureData[(i * 3)+1];
 		textureData2[(i * 4)+2] = textureData[(i * 3)+2];
+		//textureData2[(i * 4) + 3] = textureData[(i * 4) + 3];
 
 		if(textureData[(i * 3)] <= 50 || ((i) < (5*500)))
 			textureData2[(i * 4) + 3] = 0;
@@ -129,7 +130,7 @@ EngineTexture EngineContentManager::CreateTexture(std::vector<float> textureData
 			textureData2[(i * 4)+3] = textureData[(i * 3)];
 	}
 
-	tempTexture.Generate(500, (512), textureData2);
+	tempTexture.Generate(500, 512, textureData2);
 
 	ETextures[textureName] = tempTexture;
 	return tempTexture;

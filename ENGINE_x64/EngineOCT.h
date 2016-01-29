@@ -20,6 +20,7 @@ public:
 
 	std::vector<float> CorrelationResults;
 	std::vector<float> BScanResults;
+	std::vector<float> CompositeResults;
 
 	const int INPUTSPECTRALENGTH = 1024;
 	const int OUTPUTASCANLENGTH = 1024;

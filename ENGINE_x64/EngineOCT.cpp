@@ -21,6 +21,9 @@
 
 #define GPU_DEVICE_INDEX 0 
 #include <chrono>
+#include <numeric>
+#include <functional>
+#include <algorithm>
 
 void EngineOCT::LoadFileData(std::string fileName, std::vector<float> &data)
 {
@@ -411,6 +414,7 @@ cl_kernel _imageKernel;
 cl_kernel corrKernel;
 cl_kernel filterKernel;
 cl_kernel avgKernel;
+cl_kernel compositeKernel;
 
 cl_mem deviceSpectra;					// Input array of spectra that make up a single B-Scan
 cl_mem bScanCorrData;
@@ -431,7 +435,9 @@ cl_mem deviceBScanBmp;
 
 cl_mem deviceFilterResults;
 cl_mem deviceAvgResults;
-
+cl_mem deviceCompositeResults;
+cl_mem deviceBscanNoiseList;
+cl_mem deviceCorrNoiseList;
 
 char* clOCTLoadKernelSourceFromFile(char* sourceFile, unsigned int* len)
 {
@@ -702,7 +708,21 @@ int clAlloc(
 
 	//filterResults
 	deviceAvgResults = clCreateBuffer(context, CL_MEM_READ_WRITE,
-		sizeof(float)*(512 * 500*(numBScans+1)),NULL, &err);	// Correlation map
+		sizeof(float)*(512 * 500*(numBScans+1)),NULL, &err);	
+	if (err != CL_SUCCESS)
+		return err;
+
+	//Composite Results 
+	deviceCompositeResults = clCreateBuffer(context, CL_MEM_READ_WRITE,
+		sizeof(float)*(512 * 500 * 3 * (numBScans + 1)), NULL, &err);	
+	if (err != CL_SUCCESS)
+		return err;
+	deviceBscanNoiseList = clCreateBuffer(context, CL_MEM_READ_WRITE,
+		sizeof(float)*((numBScans + 1)), NULL, &err);	
+	if (err != CL_SUCCESS)
+		return err;
+	deviceCorrNoiseList = clCreateBuffer(context, CL_MEM_READ_WRITE,
+		sizeof(float)*((numBScans + 1)), NULL, &err);
 	if (err != CL_SUCCESS)
 		return err;
 
@@ -790,6 +810,9 @@ int clOCTCompileKernels(char* sourceFile, char* build_log,
 	if (err != CL_SUCCESS)
 		return err; 
 	avgKernel = clCreateKernel(_clOCTProgram, "bScanAverage", &err);
+	if (err != CL_SUCCESS)
+		return err;
+	compositeKernel = clCreateKernel(_clOCTProgram, "compositeKernel", &err);
 	if (err != CL_SUCCESS)
 		return err;
 	//	_imageKernel = clCreateKernel(_clOCTProgram, "octImageKernel", &err);
@@ -970,6 +993,20 @@ int SetFilterParameters()
 	err = clSetKernelArg(avgKernel, 1, sizeof(cl_uint), &totalBScans);
 	if (err != CL_SUCCESS) return err;
 	err = clSetKernelArg(avgKernel, 2, sizeof(cl_uint), &deviceAvgResults);
+	if (err != CL_SUCCESS) return err;
+
+	//Composite Kernel Parameters
+	err = clSetKernelArg(compositeKernel, 0, sizeof(cl_mem), &deviceAvgResults);
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(compositeKernel, 1, sizeof(cl_mem), &deviceCorrelationMap);
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(compositeKernel, 2, sizeof(cl_mem), &deviceBscanNoiseList);
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(compositeKernel, 3, sizeof(cl_mem), &deviceCorrNoiseList);
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(compositeKernel, 4, sizeof(cl_uint), &totalBScans);
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(compositeKernel, 5, sizeof(cl_mem), &deviceCompositeResults);
 	if (err != CL_SUCCESS) return err;
 
 	return err;
@@ -1273,6 +1310,90 @@ int PreProcess(short* hostSpectra, int windowType)
 	return 0;
 }
 
+//void TestBMP(std::vector<float> &data)
+//{
+//	std::vector<std::vector<float>> corrCoeff;
+//	for (int row = 0; row < 512; row++)
+//	{
+//		std::vector<float> rowData00;
+//
+//		for (int col = 0; col < (500 * 3); col += 3)
+//		{
+//			rowData00.push_back(data[col + (500 * row * 3)]);
+//		}
+//		corrCoeff.push_back(rowData00);
+//	}
+//
+//	int w = 500;
+//	int h = 512;
+//
+//	FILE *f = nullptr;
+//	if (f)
+//		free(f);
+//
+//	unsigned char *img = NULL;
+//	int filesize = 54 + 3 * w*h;  //w is your image width, h is image height, both int
+//	if (img)
+//		free(img);
+//	img = (unsigned char *)malloc(3 * w*h);
+//	memset(img, 0, sizeof(img));
+//
+//	for (int xCor = 0; xCor < w; xCor++)
+//	{
+//		for (int yCor = 0; yCor < h; yCor++)
+//		{
+//			int x = xCor;
+//			int y = (h - 1) - yCor;
+//			int r = corrCoeff[yCor][xCor];
+//			int g = corrCoeff[yCor][xCor];
+//			int b = corrCoeff[yCor][xCor];
+//			if (r > 255) r = 255;
+//			if (g > 255) g = 255;
+//			if (b > 255) b = 255;
+//			img[(x + y*w) * 3 + 2] = (unsigned char)(r);
+//			img[(x + y*w) * 3 + 1] = (unsigned char)(g);
+//			img[(x + y*w) * 3 + 0] = (unsigned char)(b);
+//		}
+//	}
+//
+//	unsigned char bmpfileheader[14] = { 'B','M', 0,0,0,0, 0,0, 0,0, 54,0,0,0 };
+//	unsigned char bmpinfoheader[40] = { 40,0,0,0, 0,0,0,0, 0,0,0,0, 1,0, 24,0 };
+//	unsigned char bmppad[3] = { 0,0,0 };
+//
+//	bmpfileheader[2] = (unsigned char)(filesize);
+//	bmpfileheader[3] = (unsigned char)(filesize >> 8);
+//	bmpfileheader[4] = (unsigned char)(filesize >> 16);
+//	bmpfileheader[5] = (unsigned char)(filesize >> 24);
+//
+//	bmpinfoheader[4] = (unsigned char)(w);
+//	bmpinfoheader[5] = (unsigned char)(w >> 8);
+//	bmpinfoheader[6] = (unsigned char)(w >> 16);
+//	bmpinfoheader[7] = (unsigned char)(w >> 24);
+//	bmpinfoheader[8] = (unsigned char)(h);
+//	bmpinfoheader[9] = (unsigned char)(h >> 8);
+//	bmpinfoheader[10] = (unsigned char)(h >> 16);
+//	bmpinfoheader[11] = (unsigned char)(h >> 24);
+//
+//
+//	std::string str = "./results/aaaaaaaa" +
+//		std::to_string(1)
+//		+ ".bmp";
+//	const char* gfgfg = str.c_str();
+//
+//	f = fopen(gfgfg, "wb");
+//	fwrite(bmpfileheader, 1, 14, f);
+//	fwrite(bmpinfoheader, 1, 40, f);
+//	for (int imgIndex = 0; imgIndex < h; imgIndex++)
+//	{
+//		fwrite(img + (w*(imgIndex - 1) * 3), 3, w, f);
+//		fwrite(bmppad, 1, (4 - (w * 3) % 4) % 4, f);
+//	}
+//
+//	free(img);
+//
+//	fclose(f);
+//
+//}
 
 void TestBMP(std::vector<float> &data)
 {
@@ -1359,8 +1480,8 @@ void TestBMP(std::vector<float> &data)
 
 }
 
-
-int FilterPostProcess(int batchSize)
+int FilterPostProcess(int batchSize,std::vector<float> &correlationResults,
+	std::vector<float> &compositeResults)
 {
 	printf("Performing Post processing on results \n");
 
@@ -1398,10 +1519,167 @@ int FilterPostProcess(int batchSize)
 	if (err != CL_SUCCESS) 
 		return err;
 
-	//std::vector<float> dsdss(filterResults.begin(), filterResults.begin() + (500*512));
+	//std::vector<float> dsdss(filterResults.begin() + (500 * 512 * 1),
+		//filterResults.begin() + (500 * 512 * 2));
 	//TestBMP(dsdss);
 
-	//
+	int topIgnoreSize = 15 * 500;
+	int dataIgnoreSize = 199 * 500;
+	int topIgnoreCorr = 5 * 500;
+
+	std::vector<float> BScanNoiseList(batchSize -1);
+	std::vector<float> CorrNoiseList(batchSize - 1);
+
+	for (int bScanNum = 0; bScanNum < batchSize - 2; bScanNum++)
+	{
+		//Threshold BScancs
+		std::vector<float> avgBScan(filterResults.begin() + (500*512*bScanNum)
+			, filterResults.begin() + (500*512*(bScanNum+1)));
+
+		std::vector<float> noiseDataBScan;
+
+		for (int i = 0; i < 51; i++)
+		{
+			noiseDataBScan.insert(noiseDataBScan.end(),
+				&avgBScan[((i * 500) + topIgnoreSize + dataIgnoreSize)],
+				&avgBScan[((i * 500) + topIgnoreSize + dataIgnoreSize) + (499)]);
+		}
+
+		double sumBScan = std::accumulate(noiseDataBScan.begin(), noiseDataBScan.end(), 0.0);
+		double meanBScan = sumBScan / noiseDataBScan.size();
+
+		std::vector<double> diff(noiseDataBScan.size());
+		std::transform(noiseDataBScan.begin(), noiseDataBScan.end(), diff.begin(),
+			std::bind2nd(std::minus<double>(), meanBScan));
+		double sq_sum = std::inner_product(diff.begin(), diff.end(), diff.begin(), 0.0);
+		double stdevBScan = std::sqrt(sq_sum / noiseDataBScan.size());
+
+		float noiseFloorBScan = meanBScan + 3 * stdevBScan;
+		BScanNoiseList.push_back(noiseFloorBScan);
+
+		//std::replace_if(avgBScan.begin(), avgBScan.end(),
+		//	[noiseFloorBScan](float value)
+		//{
+		//	if (value < noiseFloorBScan)
+		//		return true;
+		//	else
+		//		return false;
+		//}, 0);
+
+		//Threshold correlation Map
+		std::vector<float> noiseDataCorr;
+		std::vector<float> corrResult(correlationResults.begin() + (500 * 512 * bScanNum)
+			, correlationResults.begin() + (500 * 512 * (bScanNum + 1)));
+
+		for (int i = 0; i < 10; i++)
+		{
+			noiseDataCorr.insert(noiseDataCorr.end(),
+				&corrResult[(i * 500) + topIgnoreCorr],
+				&corrResult[((i * 500) + topIgnoreCorr) + (499)]);
+		}
+
+
+		double sumCorr = std::accumulate(noiseDataCorr.begin(), noiseDataCorr.end(), 0.0f);
+		double meanCorr = sumCorr / noiseDataCorr.size();
+		CorrNoiseList.push_back(meanCorr);
+
+		//std::replace_if(corrResult.begin(), corrResult.end(),
+		//	[meanCorr](float value)
+		//{
+		//	if (value < meanCorr)
+		//		return true;
+		//	else
+		//		return false;
+		//}
+		//, 0);
+
+
+		//The filtered cmOCT gives the location of the vasculature
+		//Now extract the corresponding regions from the original OCT data
+		//std::vector<float> originalBScan(filterResults.begin() + (500 * 512 * bScanNum)
+		//	, filterResults.begin() + (500 * 512 * (bScanNum + 1)));
+
+		//std::vector<float> vasculature(500 * 512 * 3);
+
+		//for (int i = 0; i < corrResult.size(); i++)
+		//{
+		//	//Now use the B-Scan to filter only the areas of the correlation map
+		//	//that are contributed to by actual OCT signal rather than  noise.
+		//	if (avgBScan[i] == 0)
+		//		corrResult[i] = 0;
+
+		//	vasculature[i * 3] = originalBScan[i];
+		//	vasculature[(i * 3) + 1] = originalBScan[i];
+		//	vasculature[(i * 3) + 2] = originalBScan[i];
+
+		//	if (corrResult[i] == 0) 
+		//		vasculature[i * 3] = 0;
+		//	
+		//}
+
+		////*********************************** Compositing *******************************************
+		//std::vector<float> composite(500 * 512 * 4);
+
+		//for (int i = 0; i < (500 * 512); i++)
+		//{
+		//	if (vasculature[i * 3] > 0) {
+		//		composite[i * 4] = vasculature[i*3];
+		//		composite[(i * 4) + 1] = 0;
+		//		composite[(i * 4) + 2] = 0;
+		//	}
+		//	else
+		//	{
+		//		composite[i * 4] = originalBScan[i];
+		//		composite[(i * 4) + 1] = originalBScan[i];
+		//		composite[(i * 4) + 2] = originalBScan[i];
+		//	}
+		//	composite[(i * 4) + 3] = originalBScan[i];
+		//}
+
+		////std::vector<float> dsdss(composite.begin(), composite.begin() + (500*512*3));
+		////TestBMP(originalBScan);
+
+		//compositeResults.insert(compositeResults.end(),
+		//	composite.begin(),composite.end());
+	}
+
+	//************************************** Composite ************************************** 
+	
+	//Copy Noise lists to GPU
+	err = clSetKernelArg(compositeKernel, 4, sizeof(cl_uint), &batchSize);
+	err = clEnqueueWriteBuffer(_commandQueue,
+		deviceBscanNoiseList,
+		CL_FALSE,
+		0,
+		BScanNoiseList.size(),
+		BScanNoiseList.data(),
+		0,
+		NULL,
+		NULL);
+	err = clEnqueueWriteBuffer(_commandQueue,
+		deviceCorrNoiseList,
+		CL_FALSE,
+		0,
+		CorrNoiseList.size(),
+		CorrNoiseList.data(),
+		0,
+		NULL,
+		NULL);
+
+	err = clEnqueueNDRangeKernel(_commandQueue, compositeKernel, 1, NULL,
+		&totalWorkItems, &numWorkItemsPerGroup, 0, NULL, NULL);
+	if (err != CL_SUCCESS)
+		return err;
+
+	std::vector<float> compositeOutput(500 * 512 * 3 * (batchSize - 1));
+
+	err = clEnqueueReadBuffer(_commandQueue, deviceCompositeResults, CL_TRUE, 0,
+		sizeof(float)*(500 * 512 * 3 * (batchSize - 1)), compositeOutput.data(), 0, NULL, NULL);
+	if (err != CL_SUCCESS) return err;
+
+	compositeResults.insert(compositeResults.end(),
+		compositeOutput.begin(),
+		compositeOutput.end());
 
 	return 0;
 }
@@ -1426,7 +1704,7 @@ int ComputeCorrelation(int batchNum, int batchSize,std::vector<float>& correlati
 
 	std::vector<float> results(correlationMap, correlationMap + (totalWorkItems*batchSize));
 
-	correlationResults.insert(correlationResults.end(), results.begin(), 
+	correlationResults = std::vector<float>(results.begin(),
 		results.end() - totalWorkItems);
 
 	if (!saveBMP) {
@@ -2227,6 +2505,8 @@ void EngineOCT::OpenCLCompute()
 		printf("Processing %i B-Scans in batches of %i, each batch comprising %i A-Scans...\n",
 			totalBScans, numBScansPerBatch, totalAScans);
 
+		numBScanProcessingIteratations = 3;
+
 		for (i = 0; i < numBScanProcessingIteratations; i++)
 		{
 			//
@@ -2374,7 +2654,8 @@ void EngineOCT::OpenCLCompute()
 
 			//
 
-			res = FilterPostProcess(batchSizePlus);
+			res = FilterPostProcess(batchSizePlus,this->CorrelationResults,
+				this->CompositeResults);
 
 			delete(tempBScanData);
 		}

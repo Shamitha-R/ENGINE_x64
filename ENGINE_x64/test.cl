@@ -465,6 +465,21 @@ __kernel void corrKernel(__global unsigned char* bScanData,
 	}
 }
 
+__kernel void compositeKernel(__global float* avgBScanData,
+	__global float* correlationResults,
+	__global float* bScanNoiseList,
+	__global float* corrNoiseList,
+	const int bScanCount,
+	__global float* compositeResults)
+{ 
+	int bScanNum = 0;
+	int kernelID = get_global_id(0);
+
+	for (bScanNum = 0; bScanNum < bScanCount - 1;bScanNum++){ 
+		
+	}
+}
+
 __kernel void filterKernel(__global float* avgBScanData,
 	const int bScanCount)
 {
@@ -509,7 +524,6 @@ __kernel void filterKernel(__global float* avgBScanData,
 				window[4];
 		}
 	}
-
 }
 
 __kernel void bScanAverage(__global unsigned char* bScanData,
@@ -523,8 +537,8 @@ __kernel void bScanAverage(__global unsigned char* bScanData,
 
 	for (bScanNum = 0; bScanNum < bScanCount -1; bScanNum++){
 
-		val = (bScanData[(bScanNum*imgSize) + (kernelID*3)] +
-			bScanData[(bScanNum*imgSize*2) + (kernelID * 3)])/2.0f;
+		val = (bScanData[(bScanNum*imgSize * 3) + (kernelID*3)] +
+			bScanData[(bScanNum*imgSize*2 * 3) + (kernelID * 3)])/2.0f;
 
 		avgResults[ (bScanNum*imgSize) + kernelID] = val;
 	}

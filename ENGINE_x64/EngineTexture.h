@@ -14,7 +14,7 @@ public:
 	EngineTexture();
 	~EngineTexture();
 
-	void Generate(GLuint textureWidth, GLuint textureHeight, GLchar* textureData);
+	void Generate(GLuint textureWidth, GLuint textureHeight, char* textureData);
 
 	void Bind();
 };

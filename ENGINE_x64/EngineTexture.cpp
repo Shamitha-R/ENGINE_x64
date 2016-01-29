@@ -12,7 +12,7 @@ EngineTexture::~EngineTexture()
 }
 
 void EngineTexture::Generate(GLuint textureWidth, GLuint textureHeight, 
-	GLchar* textureData)
+	char* textureData)
 {
 	this->TextureWidth = textureWidth;
 	this->TextureHeight = textureHeight;

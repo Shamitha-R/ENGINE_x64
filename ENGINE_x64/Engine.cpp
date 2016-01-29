@@ -108,51 +108,8 @@ Engine::~Engine()
 	EngineContentManager::FreeResources();
 }
 
-std::vector<float> RemoveNoise(std::vector<float> &bScan00,std::vector<float> &bScan01,std::vector<float> &corrResult)
+std::vector<float> RemoveNoise(std::vector<float> &originalBScan,std::vector<float> &corrResult)
 {
-	//Average the 2 Bscans
-	std::vector<float> originalBScan;
-	std::transform(bScan00.begin(), bScan00.end(), bScan01.begin(),
-		std::back_inserter(originalBScan), std::plus<float>());
-	std::transform(originalBScan.begin(), originalBScan.end(), originalBScan.begin(),
-		std::bind1st(std::multiplies<float>(), 0.5f));
-	//Median Filtering (3X3 filter kernel)
-
-	float window[9];
-
-	for (int row = 0; row < (512-(3-1));row++)
-	{
-		for (int col = 0; col < (500-(3-1)); col++)
-		{
-			window[0] = originalBScan[(col*3) + (row*500*3)];
-			window[1] = originalBScan[(col * 3) + (1*3) + (row * 500 * 3)];
-			window[2] = originalBScan[(col * 3) + (2*3) + (row * 500 * 3)];
-
-			window[3] = originalBScan[(col * 3) + ((500) * 3) + (row * 500 * 3)];
-			window[4] = originalBScan[(col * 3) + ((500) * 3) +(1*3) + (row * 500 * 3)];
-			window[5] = originalBScan[(col * 3) + ((500) * 3) +(2*3) + (row * 500 * 3)];
-
-			window[6] = originalBScan[(col * 3) + ((500 + 500) * 3) + (row * 500 * 3)];
-			window[7] = originalBScan[(col * 3) + ((500 + 500) * 3) + (1*3) + (row * 500 * 3)];
-			window[8] = originalBScan[(col * 3) + ((500 + 500) * 3) +(2*3) + (row * 500 * 3)];
-
-			//Insertion sort elements
-			int temp, i, j;
-			for (i = 0; i < 9; i++) {
-				temp = window[i];
-				for (j = i - 1; j >= 0 && temp < window[j]; j--) {
-					window[j + 1] = window[j];
-				}
-				window[j + 1] = temp;
-			}
-
-			//Assign the median value
-			originalBScan[(col * 3) + ((500) * 3) + (3) + (row * 500 * 3)] = window[4];
-			originalBScan[(col * 3) + ((500) * 3) + (4) + (row * 500 * 3)] = window[4];
-			originalBScan[(col * 3) + ((500) * 3) + (5) + (row * 500 * 3)] = window[4];
-		}
-	}
-
 	std::vector<float> avgBScan = originalBScan;
 
 	//Threshold BScan
@@ -189,15 +146,6 @@ std::vector<float> RemoveNoise(std::vector<float> &bScan00,std::vector<float> &b
 	}, 0);
 
 	//Threshold correlation Map
-	//std::replace_if(corrResult.begin(), corrResult.end(),
-	//	[](float value)
-	//{
-	//	if (value > 255)
-	//		return true;
-	//	else
-	//		return false;
-	//}, 255);
-
 	int topIgnoreCorr = 5 * 500;
 
 	std::vector<float> noiseDataCorr;
@@ -261,17 +209,9 @@ std::vector<float> RemoveNoise(std::vector<float> &bScan00,std::vector<float> &b
 	}
 
 	//Remove top area
-	std::vector<float> result(composite.begin() + topIgnoreSize, composite.end());
+	//std::vector<float> result(composite.begin() + topIgnoreSize, composite.end());
 
-	return composite;
-}
-
-void Test(unsigned char* bScanData,
-	float* filterResults,
-	float* originalBScan,
-	float* avgBScan)
-{
-
+	return originalBScan;
 }
 
 void Engine::InitalizeEngine()
@@ -297,7 +237,7 @@ void Engine::InitalizeEngine()
 
 		//EngineContentManager::LoadTexture("null", "testTex");
 
-		int imgCount = 498;
+		int imgCount = 40;
 		int imgSize = 500 * 512 * 3;
 
 		for (int corrImage = 0; corrImage < imgCount;corrImage++)
@@ -306,14 +246,8 @@ void Engine::InitalizeEngine()
 
 			std::string textureName = "tex" + std::to_string(corrImage);
 
-			std::vector<float>  bScanDat00(&OCT.BScanResults[0 + (corrImage * imgSize)], 
-				&OCT.BScanResults[500*512*3 + (corrImage * imgSize)]);
-			std::vector<float>  bScanDat01(&OCT.BScanResults[500 * 512 * 3 + (corrImage * imgSize)],
-				&OCT.BScanResults[((500 * 512 * 3) * 2) + (corrImage * imgSize)]);
-			std::vector<float>  corrDat(&OCT.CorrelationResults[0 + (corrImage * 500 * 512)],
-				&OCT.CorrelationResults[500 * 512 + (corrImage * 500 * 512)]);
-
-			std::vector<float> filteredTexData = RemoveNoise(bScanDat00,bScanDat01, corrDat);
+			std::vector<float> filteredTexData(this->OCT.CompositeResults.begin() + (500 * 512 * 3 * (corrImage)),
+				this->OCT.CompositeResults.begin() + (500 * 512 * 3 * (corrImage + 1)));
 
 			EngineContentManager::CreateTexture(filteredTexData, textureName, corrImage);
 
@@ -321,7 +255,7 @@ void Engine::InitalizeEngine()
 				EngineContentManager::ETextures[textureName],
 				glm::vec3(0,
 					0,
-					((corrImage*1.0f) / (imgCount*1.0f))*1.1f),
+					0.2f-((corrImage*1.0f) / (imgCount*1.0f))*0.2f),
 				glm::vec2(1, 1),
 				0,
 				glm::vec3(1.0f, 1.0f, 1.0f));
@@ -377,7 +311,7 @@ void Engine::RenderEngine()
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	for (int i = RenderDepth; i < EngineSlices.size(); i++)
+	for (int i = EngineSlices.size() - 1; i > RenderDepth; i--)
 		EngineSlices[i]->Render();
 
 	TwDraw();
