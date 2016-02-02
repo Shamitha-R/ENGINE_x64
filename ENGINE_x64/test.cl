@@ -360,6 +360,7 @@ __kernel void octPostProcessingKernel(
 
 }
 
+
 __kernel void corrKernel(__global unsigned char* bScanData, 
 	const int bScanCount,
 	__global float* correlationResults){
@@ -368,17 +369,7 @@ __kernel void corrKernel(__global unsigned char* bScanData,
 
 	int kernelX = 2;
 	int kernelY = 2;
-	int bScanSize = 768000; // with 3 colour
-
-	int i1p1 = 0;
-	int i1p2 = 0;
-	int i1p3 = 0;
-	int i1p4 = 0;
-
-	int i2p1 = 0;
-	int i2p2 = 0;
-	int i2p3 = 0;
-	int i2p4 = 0;
+	int bScanSize = 500*512*3; // with 3 colour
 
 	float i1Mean = 0.0f;
 	float i2Mean = 0.0f;
@@ -397,57 +388,51 @@ __kernel void corrKernel(__global unsigned char* bScanData,
 
 	int kernelID = get_global_id(0);
 
+	int imagePonts00[2*2];
+	int imagePonts01[2*2];
+	int i,row,col;
+	int sum00,sum01;
+
 	//Limit to 511 Rows
-	if (kernelID < (500*511) &&
-		((kernelID - 499) % 500) != 0) {
+	if (kernelID < (500*(512-kernelY-1)) &&
+		((kernelID - (500-kernelX -1)) % 500) != 0) {
 
 		for (bScanNum = 0; bScanNum < bScanCount - 1; bScanNum++) {
 
 			numerator = 0;
 			denominator00 = 0;
 			denominator01 = 0;
+			sum00 = 0;
+			sum01 = 0;
 
-			i1p1 = bScanData[((0 + kernelID) * 3) + (bScanSize* bScanNum)];
-			i1p2 = bScanData[((1 + kernelID) * 3) + (bScanSize* bScanNum)];
-			i1p3 = bScanData[((0 + kernelID) * 3) + (bScanSize* bScanNum) + 1500];
-			i1p4 = bScanData[((1 + kernelID) * 3) + (bScanSize* bScanNum) + 1500];
+			for (row = 0; row < kernelY;row++){ 
+				for (col = 0; col < kernelX; col++){ 
+					//Image00
+					imagePonts00[col + (row*kernelX)] =
+						bScanData[((col + kernelID) * 3) + (bScanSize* bScanNum) + (1500*row)];
 
-			i1Mean = (i1p1 + i1p2 + i1p3 + i1p4) / 4;
+					sum00 += imagePonts00[col + (row*kernelX)];
 
-			i2p1 = bScanData[((0 + kernelID) * 3) + (bScanSize* (bScanNum + 1))];
-			i2p2 = bScanData[((1 + kernelID) * 3) + (bScanSize* (bScanNum + 1))];
-			i2p3 = bScanData[((0 + kernelID) * 3) + (bScanSize* (bScanNum + 1)) + 1500];
-			i2p4 = bScanData[((1 + kernelID) * 3) + (bScanSize* (bScanNum + 1)) + 1500];
+					//Image01
+					imagePonts01[col + (row*kernelX)] =
+						bScanData[((col + kernelID) * 3) + (bScanSize* (bScanNum + 1)) + (1500*row)];
+				
+					sum01 += imagePonts01[col + (row*kernelX)];
+				}
+			}
 
-			i2Mean = (i2p1 + i2p2 + i2p3 + i2p4) / 4;
+			//Caluclate the mean values of the pixels
+			i1Mean = sum00 / (kernelX * kernelY);
+			i2Mean = sum01 / (kernelX * kernelY);
 
-			diffI1 = i1p1 - i1Mean;
-			diffI2 = i2p1 - i2Mean;
+			for (i = 0; i < (kernelX * kernelY) - 1;i++){ 
+				diffI1 = imagePonts00[i] - i1Mean;
+				diffI2 = imagePonts01[i] - i2Mean;
 
-			numerator += diffI1 * diffI2;
-			denominator00 += diffI1 * diffI1;
-			denominator01 += diffI2 * diffI2;
-
-			diffI1 = i1p2 - i1Mean;
-			diffI2 = i2p2 - i2Mean;
-
-			numerator += diffI1 * diffI2;
-			denominator00 += diffI1 * diffI1;
-			denominator01 += diffI2 * diffI2;
-
-			diffI1 = i1p3 - i1Mean;
-			diffI2 = i2p3 - i2Mean;
-
-			numerator += diffI1 * diffI2;
-			denominator00 += diffI1 * diffI1;
-			denominator01 += diffI2 * diffI2;
-
-			diffI1 = i1p4 - i1Mean;
-			diffI2 = i2p4 - i2Mean;
-
-			numerator += diffI1 * diffI2;
-			denominator00 += diffI1 * diffI1;
-			denominator01 += diffI2 * diffI2;
+				numerator += diffI1 * diffI2;
+				denominator00 += diffI1 * diffI1;
+				denominator01 += diffI2 * diffI2;
+			}
 
 			coeff = numerator / (sqrt(denominator00) * sqrt(denominator01));
 
@@ -459,9 +444,29 @@ __kernel void corrKernel(__global unsigned char* bScanData,
 				result = (1 - fabs(coeff) ) * 255;
 			}
 
-
 			correlationResults[(imageOffset*bScanNum)+kernelID] = result;
 		}
+	}
+}
+
+__kernel void opacityKernel(__global float* compositeResults,
+	const int bScanCount)
+{
+	int row;
+	int bScanNum = 0;
+	int kernelID = get_global_id(0);
+
+	row = kernelID / 500;
+
+	for (bScanNum = 0; bScanNum < bScanCount - 1; bScanNum++) {
+		if (compositeResults[(kernelID * 4) + (512 * 500 * 4 * bScanNum)] < 50)
+			compositeResults[(kernelID * 4) + 3 + (512 * 500 * 4 * bScanNum)] = 0;
+		else
+			compositeResults[(kernelID * 4) + 3 + (512 * 500 * 4 * bScanNum)] = 
+			compositeResults[(kernelID * 4) + (512 * 500 * 4 * bScanNum)];
+
+		if(row <= 15)
+			compositeResults[(kernelID * 4) + 3 + (512 * 500 * 4 * bScanNum)] = 0;
 	}
 }
 
@@ -475,8 +480,40 @@ __kernel void compositeKernel(__global float* avgBScanData,
 	int bScanNum = 0;
 	int kernelID = get_global_id(0);
 
+	bool avgBScanZero;
+	bool corrZero;
+
 	for (bScanNum = 0; bScanNum < bScanCount - 1;bScanNum++){ 
-		
+
+		avgBScanZero = false;
+		corrZero = false;
+
+		//Replace AVG BScan
+		if(avgBScanData[kernelID + (512*500*bScanNum)] < bScanNoiseList[bScanNum]){
+			avgBScanZero = true;
+		}
+
+		//Replace Correlation 
+		if (correlationResults[kernelID + (512 * 500 * bScanNum)] < corrNoiseList[bScanNum]) {
+			corrZero = true;
+		}
+
+		//Vasculature
+		if(avgBScanZero == true || corrZero == true){ 
+			compositeResults[(kernelID * 4) + (512 * 500 * 4 * bScanNum)]
+				= avgBScanData[kernelID + (512 * 500  * bScanNum)];
+			compositeResults[(kernelID * 4) + 1 + (512 * 500 * 4 * bScanNum)]
+				= avgBScanData[kernelID + (512 * 500  * bScanNum)];
+			compositeResults[(kernelID * 4) + 2 + (512 * 500 * 4 * bScanNum)]
+				= avgBScanData[kernelID + (512 * 500  * bScanNum)];
+		}else{ 
+			compositeResults[(kernelID * 4) + (512 * 500 * 4 * bScanNum)]
+				= avgBScanData[kernelID + (512 * 500 * bScanNum)];
+			compositeResults[(kernelID * 4) + 1 + (512 * 500 * 4 * bScanNum)]
+				= 0;
+			compositeResults[(kernelID * 4) + 2 + (512 * 500 * 4 * bScanNum)]
+				= 0;
+		}
 	}
 }
 
@@ -531,16 +568,22 @@ __kernel void bScanAverage(__global unsigned char* bScanData,
 	__global float* avgResults)
 { 
 	int bScanNum;
-	float val = 0.0f;
+	float sum,val00,val01,val = 0.0f;
 	int imgSize = 500 * 512;
 	int kernelID = get_global_id(0);
 
 	for (bScanNum = 0; bScanNum < bScanCount -1; bScanNum++){
 
-		val = (bScanData[(bScanNum*imgSize * 3) + (kernelID*3)] +
-			bScanData[(bScanNum*imgSize*2 * 3) + (kernelID * 3)])/2.0f;
+		val00 = bScanData[(bScanNum*imgSize * 3) + (kernelID * 3)];
+		val01 = bScanData[(bScanNum*imgSize * 3) + (kernelID * 3) + (imgSize * 3)];
+		sum = val00 + val01;
 
-		avgResults[ (bScanNum*imgSize) + kernelID] = val;
+		//if (sum >= 510)
+			//sum = 255;
+		
+		val = (sum)/2.0f;
+		
+		avgResults[(bScanNum*imgSize) + kernelID] = val;
 	}
 }
 

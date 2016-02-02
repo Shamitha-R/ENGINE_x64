@@ -16,7 +16,7 @@ public:
 
 	static EngineTexture LoadTexture(const GLchar* filePath, std::string textureName);
 
-	static EngineTexture CreateTexture(std::vector<float> textureData, std::string textureName, int depthLayer);
+	static EngineTexture CreateTexture(std::vector<GLchar> textureData, std::string textureName, int depthLayer);
 
 	static void FreeResources();
 

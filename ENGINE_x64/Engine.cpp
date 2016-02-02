@@ -228,7 +228,7 @@ void Engine::InitalizeEngine()
 
 		glm::mat4 projection;
 		glm::mat4 view;
-		view = glm::translate(view, glm::vec3(0.0f, 1.0f, -6.0f));
+		view = glm::translate(view, glm::vec3(0.0f, 1.0f, -7.0f));
 		projection = glm::perspective(75.0f, (GLfloat)800 / (GLfloat)600, 0.1f, 100.0f);
 		
 		EngineContentManager::EShaders["sprite"].Enable().SetInteger("image", 0);
@@ -237,17 +237,18 @@ void Engine::InitalizeEngine()
 
 		//EngineContentManager::LoadTexture("null", "testTex");
 
-		int imgCount = 40;
-		int imgSize = 500 * 512 * 3;
+		int imgCount = 400;
 
+		//printf("Init\n");
 		for (int corrImage = 0; corrImage < imgCount;corrImage++)
 		{
-			printf("Rendering Sllice: %d\n", corrImage);
+			if(corrImage % 10 == 0)
+				printf("Rendering Slices %0.2f %%\n",(corrImage*1.0f)/(imgCount*1.0f)*100.0f);
 
 			std::string textureName = "tex" + std::to_string(corrImage);
 
-			std::vector<float> filteredTexData(this->OCT.CompositeResults.begin() + (500 * 512 * 3 * (corrImage)),
-				this->OCT.CompositeResults.begin() + (500 * 512 * 3 * (corrImage + 1)));
+			std::vector<GLchar> filteredTexData(this->OCT.CompositeResults.begin() + (500 * 512 * 4 * (corrImage)),
+				this->OCT.CompositeResults.begin() + (500 * 512 * 4 * (corrImage + 1)));
 
 			EngineContentManager::CreateTexture(filteredTexData, textureName, corrImage);
 
@@ -255,12 +256,11 @@ void Engine::InitalizeEngine()
 				EngineContentManager::ETextures[textureName],
 				glm::vec3(0,
 					0,
-					0.2f-((corrImage*1.0f) / (imgCount*1.0f))*0.2f),
+					-0.6f+((corrImage*1.0f) / (imgCount*1.0f))*1.2f),
 				glm::vec2(1, 1),
 				0,
 				glm::vec3(1.0f, 1.0f, 1.0f));
 			EngineSlices.push_back(testObject);
-
 		}
 
 		RenderDepth = 0;
@@ -311,7 +311,7 @@ void Engine::RenderEngine()
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	for (int i = EngineSlices.size() - 1; i > RenderDepth; i--)
+	for (int i = RenderDepth; i < EngineSlices.size(); i++)
 		EngineSlices[i]->Render();
 
 	TwDraw();

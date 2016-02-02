@@ -108,29 +108,12 @@ EngineTexture EngineContentManager::LoadTexture(const GLchar* filePath,
 	return tempTexture;
 }
 
-EngineTexture EngineContentManager::CreateTexture(std::vector<float> textureData, std::string textureName,
+EngineTexture EngineContentManager::CreateTexture(std::vector<GLchar> textureData, std::string textureName,
 	int depthLayer)
 {
 	EngineTexture tempTexture;
 
-	//////TODO Change to Heap
-	GLchar textureData2[500 * (512) * 4];
-	std::fill_n(textureData2, 500 * 512 * 4, 255);
-
-	for (int i = 0; i < (500*512);i++)
-	{
-		textureData2[(i * 4)] = textureData[(i * 3)];
-		textureData2[(i * 4)+1] = textureData[(i * 3)+1];
-		textureData2[(i * 4)+2] = textureData[(i * 3)+2];
-		//textureData2[(i * 4) + 3] = textureData[(i * 4) + 3];
-
-		if(textureData[(i * 3)] <= 50 || ((i) < (5*500)))
-			textureData2[(i * 4) + 3] = 0;
-		else
-			textureData2[(i * 4)+3] = textureData[(i * 3)];
-	}
-
-	tempTexture.Generate(500, 512, textureData2);
+	tempTexture.Generate(500, 512, textureData.data());
 
 	ETextures[textureName] = tempTexture;
 	return tempTexture;
