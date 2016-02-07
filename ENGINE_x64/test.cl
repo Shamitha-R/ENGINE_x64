@@ -441,7 +441,7 @@ __kernel void corrKernel(__global unsigned char* bScanData,
 				result = 0;
 			}
 			else {
-				result = (1 - fabs(coeff) ) * 255;
+				result = (1.0f - fabs(coeff)) * 255.0f;
 			}
 
 			correlationResults[(imageOffset*bScanNum)+kernelID] = result;
@@ -459,7 +459,7 @@ __kernel void opacityKernel(__global float* compositeResults,
 	row = kernelID / 500;
 
 	for (bScanNum = 0; bScanNum < bScanCount - 1; bScanNum++) {
-		if (compositeResults[(kernelID * 4) + (512 * 500 * 4 * bScanNum)] < 50)
+		if (compositeResults[(kernelID * 4) + (512 * 500 * 4 * bScanNum)] < 60)
 			compositeResults[(kernelID * 4) + 3 + (512 * 500 * 4 * bScanNum)] = 0;
 		else
 			compositeResults[(kernelID * 4) + 3 + (512 * 500 * 4 * bScanNum)] = 
@@ -489,30 +489,50 @@ __kernel void compositeKernel(__global float* avgBScanData,
 		corrZero = false;
 
 		//Replace AVG BScan
-		if(avgBScanData[kernelID + (512*500*bScanNum)] < bScanNoiseList[bScanNum]){
+
+		if (avgBScanData[kernelID + (512 * 500 * bScanNum)] <
+			bScanNoiseList[bScanNum]) {
 			avgBScanZero = true;
 		}
 
 		//Replace Correlation 
-		if (correlationResults[kernelID + (512 * 500 * bScanNum)] < corrNoiseList[bScanNum]) {
-			corrZero = true;
+		if (kernelID > (2 * 500)) {
+			if (correlationResults[kernelID + (512 * 500 * bScanNum) - (1000)] < 
+				corrNoiseList[bScanNum]) {
+				corrZero = true;
+			}
 		}
 
 		//Vasculature
-		if(avgBScanZero == true || corrZero == true){ 
+		//if(avgBScanZero == true || corrZero == true){ 
 			compositeResults[(kernelID * 4) + (512 * 500 * 4 * bScanNum)]
 				= avgBScanData[kernelID + (512 * 500  * bScanNum)];
 			compositeResults[(kernelID * 4) + 1 + (512 * 500 * 4 * bScanNum)]
 				= avgBScanData[kernelID + (512 * 500  * bScanNum)];
 			compositeResults[(kernelID * 4) + 2 + (512 * 500 * 4 * bScanNum)]
 				= avgBScanData[kernelID + (512 * 500  * bScanNum)];
+		//}else{ 
+		if (avgBScanZero == true || corrZero == true) {
+			compositeResults[(kernelID * 4) + (512 * 500 * 4 * bScanNum)]
+				= 0;
+			compositeResults[(kernelID * 4) + 1 + (512 * 500 * 4 * bScanNum)]
+				= 0;
+			compositeResults[(kernelID * 4) + 2 + (512 * 500 * 4 * bScanNum)]
+				= 0;
+		}
+
+		if(compositeResults[(kernelID * 4) + (512 * 500 * 4 * bScanNum)] > 0){ 
+			compositeResults[(kernelID * 4) + 1 + (512 * 500 * 4 * bScanNum)]
+				= 0;
+			compositeResults[(kernelID * 4) + 2 + (512 * 500 * 4 * bScanNum)]
+				= 0;
 		}else{ 
 			compositeResults[(kernelID * 4) + (512 * 500 * 4 * bScanNum)]
 				= avgBScanData[kernelID + (512 * 500 * bScanNum)];
 			compositeResults[(kernelID * 4) + 1 + (512 * 500 * 4 * bScanNum)]
-				= 0;
+				= avgBScanData[kernelID + (512 * 500 * bScanNum)];
 			compositeResults[(kernelID * 4) + 2 + (512 * 500 * 4 * bScanNum)]
-				= 0;
+				= avgBScanData[kernelID + (512 * 500 * bScanNum)];
 		}
 	}
 }
@@ -582,8 +602,9 @@ __kernel void bScanAverage(__global unsigned char* bScanData,
 			//sum = 255;
 		
 		val = (sum)/2.0f;
+
 		
-		avgResults[(bScanNum*imgSize) + kernelID] = val;
+		avgResults[(bScanNum*imgSize) + kernelID] = val00;
 	}
 }
 

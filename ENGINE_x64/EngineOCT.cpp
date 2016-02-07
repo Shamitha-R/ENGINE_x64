@@ -1404,23 +1404,83 @@ int PreProcess(short* hostSpectra, int windowType)
 //
 //}
 
-void TestBMP(std::vector<float> &data)
+int SaveBitmapVec(
+	unsigned char* pixelArray,       // In bitmap format (including padding)
+	unsigned int width,
+	unsigned int height,
+	unsigned int pixelArraySize,      // length of the above array
+	const char* fileName)
+{
+	//
+	// Save BScan to RGB 24bpp device independent bitmap
+	//
+	float bitmapFileSize;
+	unsigned int bpp = 24;
+	unsigned int bytesPerPixel = bpp / 8;
+	unsigned int headerLen = 14;    // 14 byte bitmap header
+	unsigned int dibHeaderLen = 12; // BITMAPCOREHEADER
+	unsigned int offset = headerLen + dibHeaderLen;
+	unsigned int planes = 1;
+
+	unsigned int bytePixel;
+	unsigned int i;
+	unsigned int ii;
+	FILE* fbmp;
+
+	bitmapFileSize = headerLen + dibHeaderLen + pixelArraySize;
+	//
+	// Write the source array to a device independent bitmap file
+	//
+	fbmp = fopen(fileName, "wb");
+	//
+	// Write a 14 byte header
+	//
+	//value="BM";
+	fwrite("BM", 1, 2, fbmp);
+	fwrite(&bitmapFileSize, 4, 1, fbmp);
+	fwrite("0", 1, 4, fbmp);   // Write 4 zero bytes to the reserved section
+	fwrite(&offset, 4, 1, fbmp); // Write the offset to the beginning of the image data
+								 //
+								 // Write DIB header
+								 //
+	fwrite(&dibHeaderLen, 4, 1, fbmp);
+	fwrite(&width, 2, 1, fbmp);
+	fwrite(&height, 2, 1, fbmp);
+	fwrite(&planes, 2, 1, fbmp);
+	fwrite(&bpp, 2, 1, fbmp);
+	//
+	// Write the pixel array
+	//
+	for (i = 0; i<pixelArraySize; i++)
+	{
+		ii = pixelArraySize - i - 1;
+		//printf("%hhu grd",pixelArray[ii]);
+		fwrite(&pixelArray[ii], 1, 1, fbmp);  // Red
+	}
+
+	fclose(fbmp);
+
+	return EXIT_SUCCESS;
+
+}
+
+void TestBMP(std::vector<float> &data,int bscanNum)
 {
 	std::vector<std::vector<float>> corrCoeff;
-	//std::vector<std::vector<float>> corrCoeffRed;
+	std::vector<std::vector<float>> corrCoeffRed;
 
 	for (int row = 0; row < 512; row++)
 	{
 		std::vector<float> rowData00;
-		//std::vector<float> rowDataRed;
+		std::vector<float> rowDataRed;
 
-		for (int col = 0; col < (500 * 1); col += 1)
+		for (int col = 0; col < (500 * 4); col += 4)
 		{
-			//rowDataRed.push_back(data[col + (500 * row * 4)]);
-			rowData00.push_back(data[col + (500 * row * 1) + 0]);
+			rowDataRed.push_back(data[col + (500 * row * 4)]);
+			rowData00.push_back(data[col + (500 * row * 4) + 1]);
 		}
 		corrCoeff.push_back(rowData00);
-		//corrCoeffRed.push_back(rowDataRed);
+		corrCoeffRed.push_back(rowDataRed);
 	}
 
 	int w = 500;
@@ -1443,7 +1503,7 @@ void TestBMP(std::vector<float> &data)
 		{
 			int x = xCor;
 			int y = (h - 1) - yCor;
-			int r = corrCoeff[yCor][xCor];
+			int r = corrCoeffRed[yCor][xCor];
 			int g = corrCoeff[yCor][xCor];
 			int b = corrCoeff[yCor][xCor];
 			if (r > 255) r = 255;
@@ -1475,7 +1535,7 @@ void TestBMP(std::vector<float> &data)
 
 
 	std::string str = "./results/aaaaaaaa" +
-		std::to_string(1)
+		std::to_string(bscanNum)
 		+ ".bmp";
 	const char* gfgfg = str.c_str();
 
@@ -1494,7 +1554,23 @@ void TestBMP(std::vector<float> &data)
 
 }
 
-int FilterPostProcess(int batchSize,std::vector<float> &correlationResults,
+float standard_deviation(std::vector<float> &data)
+{
+	int n = data.size();
+
+	float mean = 0.0, sum_deviation = 0.0;
+	int i;
+	for (i = 0; i<n; ++i)
+	{
+		mean += data[i];
+	}
+	mean = mean / n;
+	for (i = 0; i<n; ++i)
+		sum_deviation += (data[i] - mean)*(data[i] - mean);
+	return sqrt(sum_deviation / n);
+}
+
+int FilterPostProcess(int batchNum,int batchSize,std::vector<float> &correlationResults,
 	std::vector<float> &compositeResults)
 {
 	printf("Performing Post processing on results \n");
@@ -1534,13 +1610,10 @@ int FilterPostProcess(int batchSize,std::vector<float> &correlationResults,
 	if (err != CL_SUCCESS) 
 		return err;
 
-	std::vector<float> dsdss(filterResults.begin(),
-		filterResults.begin() + (500 * 512));
-	TestBMP(dsdss);
 
 	int topIgnoreSize = 15 * 500;
 	int dataIgnoreSize = 199 * 500;
-	int topIgnoreCorr = 15 * 500;
+	int topIgnoreCorr = 14 * 500;
 
 	std::vector<float> BScanNoiseList;
 	std::vector<float> CorrNoiseList;
@@ -1557,7 +1630,7 @@ int FilterPostProcess(int batchSize,std::vector<float> &correlationResults,
 		{
 			noiseDataBScan.insert(noiseDataBScan.end(),
 				&avgBScan[((i * 500) + topIgnoreSize + dataIgnoreSize)],
-				&avgBScan[((i * 500) + topIgnoreSize + dataIgnoreSize) + (499)]);
+				&avgBScan[((i * 500) + topIgnoreSize + dataIgnoreSize) + (500)]);
 		}
 
 		double sumBScan = std::accumulate(noiseDataBScan.begin(), noiseDataBScan.end(), 0.0);
@@ -1568,6 +1641,8 @@ int FilterPostProcess(int batchSize,std::vector<float> &correlationResults,
 			std::bind2nd(std::minus<double>(), meanBScan));
 		double sq_sum = std::inner_product(diff.begin(), diff.end(), diff.begin(), 0.0);
 		double stdevBScan = std::sqrt(sq_sum / noiseDataBScan.size());
+
+		float test = standard_deviation(noiseDataBScan);
 
 		float noiseFloorBScan = meanBScan + 3 * stdevBScan;
 		BScanNoiseList.push_back(noiseFloorBScan);
@@ -1590,7 +1665,7 @@ int FilterPostProcess(int batchSize,std::vector<float> &correlationResults,
 		{
 			noiseDataCorr.insert(noiseDataCorr.end(),
 				&corrResult[(i * 500) + topIgnoreCorr],
-				&corrResult[((i * 500) + topIgnoreCorr) + (499)]);
+				&corrResult[((i * 500) + topIgnoreCorr) + (500)]);
 		}
 
 
@@ -1598,128 +1673,154 @@ int FilterPostProcess(int batchSize,std::vector<float> &correlationResults,
 		double meanCorr = sumCorr / noiseDataCorr.size();
 		CorrNoiseList.push_back(meanCorr);
 
-		std::replace_if(corrResult.begin(), corrResult.end(),
-			[meanCorr](float value)
-		{
-			if (value < meanCorr)
-				return true;
-			else
-				return false;
-		}
-		, 0);
+		//std::replace_if(corrResult.begin(), corrResult.end(),
+		//	[meanCorr](float value)
+		//{
+		//	if (value < meanCorr)
+		//		return true;
+		//	else
+		//		return false;
+		//}
+		//, 0);
 
+		////Now use the B-Scan to filter only the areas of the correlation map
+		////that are contributed to by actual OCT signal rather than  noise.
+		//std::vector<float> cmOCTFiltered = corrResult;
+		//for (int i = 0; i < cmOCTFiltered.size(); i++)
+		//{
+		//	if (i < (400 * 500)) {
+		//		if (avgBScan[i+(500)] == 0)
+		//			cmOCTFiltered[i] = 0;
+		//	}
+		//}
 
 		//The filtered cmOCT gives the location of the vasculature
 		//Now extract the corresponding regions from the original OCT data
-		std::vector<float> originalBScan(filterResults.begin() + (500 * 512 * bScanNum)
-			, filterResults.begin() + (500 * 512 * (bScanNum + 1)));
+		//std::vector<float> originalBScan(filterResults.begin() + (500 * 512 * bScanNum)
+		//	, filterResults.begin() + (500 * 512 * (bScanNum + 1)));
 
-		std::vector<float> vasculature(500 * 512 * 3);
+		//std::vector<float> vasculature(500 * 512 * 3);
 
-		for (int i = 0; i < corrResult.size(); i++)
-		{
-			//Now use the B-Scan to filter only the areas of the correlation map
-			//that are contributed to by actual OCT signal rather than  noise.
-			if (avgBScan[i] == 0)
-				corrResult[i] = 0;
+		//for (int i = 0; i < cmOCTFiltered.size(); i++)
+		//{
+		//	vasculature[i * 3] = originalBScan[i];
+		//	vasculature[(i * 3) + 1] = originalBScan[i];
+		//	vasculature[(i * 3) + 2] = originalBScan[i];
 
-			vasculature[i * 3] = originalBScan[i];
-			vasculature[(i * 3) + 1] = originalBScan[i];
-			vasculature[(i * 3) + 2] = originalBScan[i];
+		//	if (i >= 500) {
+		//		if (cmOCTFiltered[i - 500] == 0) {
+		//			vasculature[i * 3] = 0;
+		//			vasculature[(i * 3) + 1] = 0;
+		//			vasculature[(i * 3) + 1] = 0;
+		//		}
+		//	}
+		//}
 
-			if (corrResult[i] == 0) {
-				vasculature[i * 3] = 0;
-				vasculature[(i * 3) + 1] = 0;
-				vasculature[(i * 3) + 1] = 0;
-			}
-			
-		}
+		//int ignoreSize = 16 * 500;
+		//std::vector<unsigned char> testVec;
+		//for (int i = 0; i < (500 * 512); i++)
+		//{
+		//	if (i >= ignoreSize &&
+		//		i < ((200 * 500) + ignoreSize)) {
+		//		testVec.push_back(vasculature[i*3]);
+		//		//testVec.push_back(vasculature[i*3]);
+		//		//testVec.push_back(vasculature[i*3]);
+		//	}
+		//}
 
-		//std::vector<float> dsdss(corrResult.begin(),
-			//corrResult.end());
-		//TestBMP(dsdss);
+		//std::string str = "./results/vas" +
+		//	std::to_string(0 + (0 * 1000) + 2)
+		//	+ ".bmp";
+		//const char* fileName = str.c_str();
+		//SaveBitmapVec(testVec.data(), 500, (200), 500 * (200) * 3, fileName);
 
 		////*********************************** Compositing *******************************************
-		std::vector<float> composite(500 * 512 * 4);
+		//std::vector<float> composite(500 * 512 * 4);
 
-		for (int i = 0; i < (500 * 512); i++)
-		{
-			if (vasculature[i * 3] > 0) {
-				composite[i * 4] = vasculature[i*3];
-				composite[(i * 4) + 1] = 0;
-				composite[(i * 4) + 2] = 0;
-			}
-			else
-			{
-				composite[i * 4] = originalBScan[i];
-				composite[(i * 4) + 1] = originalBScan[i];
-				composite[(i * 4) + 2] = originalBScan[i];
-			}
-			composite[(i * 4) + 3] = originalBScan[i];
-		}
+		//for (int i = 0; i < (500 * 512); i++)
+		//{
+		//	if (vasculature[i * 3] > 0) {
+		//		composite[i * 4] = vasculature[i*3];
+		//		composite[(i * 4) + 1] = 0;
+		//		composite[(i * 4) + 2] = 0;
+		//	}
+		//	else
+		//	{
+		//		composite[i * 4] = originalBScan[i];
+		//		composite[(i * 4) + 1] = originalBScan[i];
+		//		composite[(i * 4) + 2] = originalBScan[i];
+		//	}
 
-		//std::vector<float> dsdss(composite.begin(), composite.begin() + (500*512*3));
-		//TestBMP(originalBScan);
+		//	if (originalBScan[i] < 50 || i < (15*500))
+		//		composite[(i * 4) + 3] = 0;
+		//	else
+		//		composite[(i * 4) + 3] = originalBScan[i];
+		//}
 
-		compositeResults.insert(compositeResults.end(),
-			composite.begin(),composite.end());
+		//compositeResults.insert(compositeResults.end(),
+		//	composite.begin(),composite.end());
 
-		std::vector<float> dsdss(compositeResults.begin(),
-			compositeResults.begin() + (500 * 512 * 4));
-		TestBMP(dsdss);
-
+		/*std::vector<float> dsds(composite.begin(),
+			composite.begin() + (500 * 512 * 4));
+		TestBMP(dsds,bScanNum+(batchNum*1000));*/
 	}
 
 	//************************************** Composite ************************************** 
 	
 	//Copy Noise lists to GPU
-	//err = clSetKernelArg(compositeKernel, 4, sizeof(cl_uint), &batchSize);
-	//err = clEnqueueWriteBuffer(_commandQueue,
-	//	deviceBscanNoiseList,
-	//	CL_FALSE,
-	//	0,
-	//	BScanNoiseList.size() * sizeof(float),
-	//	BScanNoiseList.data(),
-	//	0,
-	//	NULL,
-	//	NULL);
-	//err = clEnqueueWriteBuffer(_commandQueue,
-	//	deviceCorrNoiseList,
-	//	CL_FALSE,
-	//	0,
-	//	CorrNoiseList.size() * sizeof(float),
-	//	CorrNoiseList.data(),
-	//	0,
-	//	NULL,
-	//	NULL);
+	err = clSetKernelArg(compositeKernel, 4, sizeof(cl_uint), &batchSize);
+	err = clEnqueueWriteBuffer(_commandQueue,
+		deviceBscanNoiseList,
+		CL_FALSE,
+		0,
+		BScanNoiseList.size() * sizeof(float),
+		BScanNoiseList.data(),
+		0,
+		NULL,
+		NULL);
+	err = clEnqueueWriteBuffer(_commandQueue,
+		deviceCorrNoiseList,
+		CL_FALSE,
+		0,
+		CorrNoiseList.size() * sizeof(float),
+		CorrNoiseList.data(),
+		0,
+		NULL,
+		NULL);
 
-	//err = clEnqueueNDRangeKernel(_commandQueue, compositeKernel, 1, NULL,
-	//	&totalWorkItems, &numWorkItemsPerGroup, 0, NULL, NULL);
-	//if (err != CL_SUCCESS)
-	//	return err;
+	err = clEnqueueNDRangeKernel(_commandQueue, compositeKernel, 1, NULL,
+		&totalWorkItems, &numWorkItemsPerGroup, 0, NULL, NULL);
+	if (err != CL_SUCCESS)
+		return err;
 
-	//std::vector<float> compositeOutput(500 * 512 * 4 * (batchSize - 1));
-
-	////err = clEnqueueReadBuffer(_commandQueue, deviceCompositeResults, CL_TRUE, 0,
-	//	//sizeof(float)*(500 * 512 * 4 * (batchSize - 1)), compositeOutput.data(), 0, NULL, NULL);
-	////if (err != CL_SUCCESS) return err;
-
-	////Set Opacity
-	//err = clSetKernelArg(opacityKernel, 1, sizeof(cl_uint), &batchSize);
-
-	//err = clEnqueueNDRangeKernel(_commandQueue, opacityKernel, 1, NULL,
-	//	&totalWorkItems, &numWorkItemsPerGroup, 0, NULL, NULL);
-	//if (err != CL_SUCCESS)
-	//	return err;
+	std::vector<float> compositeOutput(500 * 512 * 4 * (batchSize - 1));
 
 	//err = clEnqueueReadBuffer(_commandQueue, deviceCompositeResults, CL_TRUE, 0,
-	//sizeof(float)*(500 * 512 * 4 * (batchSize - 1)), compositeOutput.data(), 0, NULL, NULL);
+		//sizeof(float)*(500 * 512 * 4 * (batchSize - 1)), compositeOutput.data(), 0, NULL, NULL);
 	//if (err != CL_SUCCESS) return err;
 
-	//compositeResults.insert(compositeResults.end(),
-	//	compositeOutput.begin(),
-	//	compositeOutput.end());
+	//Set Opacity
+	err = clSetKernelArg(opacityKernel, 1, sizeof(cl_uint), &batchSize);
 
+	err = clEnqueueNDRangeKernel(_commandQueue, opacityKernel, 1, NULL,
+		&totalWorkItems, &numWorkItemsPerGroup, 0, NULL, NULL);
+	if (err != CL_SUCCESS)
+		return err;
+
+	err = clEnqueueReadBuffer(_commandQueue, deviceCompositeResults, CL_TRUE, 0,
+	sizeof(float)*(500 * 512 * 4 * (batchSize - 1)), compositeOutput.data(), 0, NULL, NULL);
+	if (err != CL_SUCCESS) return err;
+
+	compositeResults.insert(compositeResults.end(),
+		compositeOutput.begin(),
+		compositeOutput.end());
+
+	//for (int bScanNum = 0; bScanNum < batchSize - 1; bScanNum++)
+	//{
+	//	std::vector<float> dsds(compositeOutput.begin() + (bScanNum * (500*512*4)),
+	//		compositeOutput.begin() + (500 * 512 * 4) + (bScanNum * (500 * 512 * 4)));
+	//	TestBMP(dsds,bScanNum+(batchNum*1000));
+	//}
 
 	return 0;
 }
@@ -1752,11 +1853,11 @@ int ComputeCorrelation(int batchNum, int batchSize,std::vector<float>& correlati
 		{
 
 			std::vector<std::vector<float>> corrCoeff;
-			for (int row = 0; row < 511; row++)
+			for (int row = 0; row < 512; row++)
 			{
 				std::vector<float> rowData00;
 
-				for (int col = 0; col < 499; col += 1)
+				for (int col = 0; col < 500; col += 1)
 				{
 					rowData00.push_back(results[col + (500 * row) +
 						(bitMapNum * totalWorkItems)]);
@@ -1764,7 +1865,25 @@ int ComputeCorrelation(int batchNum, int batchSize,std::vector<float>& correlati
 				corrCoeff.push_back(rowData00);
 			}
 
-			if (saveBMP) {
+			int ignoreSize = 14 * 500;
+			std::vector<unsigned char> testVec;
+			for (int i = 0; i < (500 * 512);i++)
+			{
+				if (i >= ignoreSize &&
+					i < ((200*500)+ignoreSize)) {
+					testVec.push_back(results[i + (bitMapNum * totalWorkItems)]);
+					testVec.push_back(results[i + (bitMapNum * totalWorkItems)]);
+					testVec.push_back(results[i + (bitMapNum * totalWorkItems)]);
+				}
+			}
+
+			std::string str = "./results/cmOCT" +
+				std::to_string(bitMapNum + (batchNum * 1000) + 2)
+				+ ".bmp";
+			const char* fileName = str.c_str();
+			SaveBitmapVec(testVec.data(), 500, (200), 500 * (200) * 3,fileName);
+
+			if (!saveBMP) {
 
 				int w = 499;
 				int h = 511;
@@ -2545,7 +2664,7 @@ void EngineOCT::OpenCLCompute()
 		printf("Processing %i B-Scans in batches of %i, each batch comprising %i A-Scans...\n",
 			totalBScans, numBScansPerBatch, totalAScans);
 
-		numBScanProcessingIteratations = 1;
+		//numBScanProcessingIteratations = 1;
 
 		for (i = 0; i < numBScanProcessingIteratations; i++)
 		{
@@ -2694,7 +2813,7 @@ void EngineOCT::OpenCLCompute()
 
 			//
 
-			res = FilterPostProcess(batchSizePlus,this->CorrelationResults,
+			res = FilterPostProcess(batchNum,batchSizePlus,this->CorrelationResults,
 				this->CompositeResults);
 
 			delete(tempBScanData);

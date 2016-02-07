@@ -237,7 +237,7 @@ void Engine::InitalizeEngine()
 
 		//EngineContentManager::LoadTexture("null", "testTex");
 
-		int imgCount = 400;
+		int imgCount = 2;
 
 		//printf("Init\n");
 		for (int corrImage = 0; corrImage < imgCount;corrImage++)
@@ -256,7 +256,7 @@ void Engine::InitalizeEngine()
 				EngineContentManager::ETextures[textureName],
 				glm::vec3(0,
 					0,
-					-0.6f+((corrImage*1.0f) / (imgCount*1.0f))*1.2f),
+					-0.50f+((corrImage*1.0f) / (imgCount*1.0f))*1.0f),
 				glm::vec2(1, 1),
 				0,
 				glm::vec3(1.0f, 1.0f, 1.0f));
@@ -308,6 +308,7 @@ void Engine::UpdateEngine(GLfloat engineTime)
 
 void Engine::RenderEngine()
 {
+
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -319,6 +320,226 @@ void Engine::RenderEngine()
 	SDL_GL_SwapWindow(this->Renderer.EngineWindow);
 }
 
+SDL_Window* EngineWindow2 = NULL;
+SDL_GLContext EngineContext2;
+SDL_Surface* gScreenSurface2 = NULL;
+double mdRotation[16];
+float mfRot[3];
+int x, y;
+bool InitOpenGL()
+{
+	printf("Initializing OpenGL\n");
+
+	GLenum error = GL_NO_ERROR;
+
+	glClearColor(0.f, 0.f, 0.f, 1.0f);
+
+	glewExperimental = GL_TRUE;
+	error = glewInit();
+	if (GL_TRUE != glewGetExtension("GL_EXT_texture3D"))
+	{
+		
+	}
+
+	return true;
+}
+
+bool InitializeTest()
+{
+	printf("Initializing Engine\n");
+
+
+	//The surface contained by the window
+
+
+	//Initialization flag
+	bool success = true;
+
+	//Initialize SDL
+	if (SDL_Init(SDL_INIT_VIDEO) < 0)
+	{
+		printf("SDL could not initialize! SDL Error: %s\n", SDL_GetError());
+		success = false;
+	}
+	else
+	{
+		//ActivateShader OpenGL 2.1
+		//SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+		//SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, );
+		SDL_GL_SetAttribute(SDL_GL_BUFFER_SIZE, 32);
+		SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 16);
+		SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+
+		//Create window
+		EngineWindow2 = SDL_CreateWindow("ENGINE_WINx64",
+			SDL_WINDOWPOS_UNDEFINED,
+			SDL_WINDOWPOS_UNDEFINED,
+			800, 600,
+			SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN);
+
+		if (EngineWindow2 == NULL)
+		{
+			printf("Window could not be created! SDL Error: %s\n", SDL_GetError());
+			success = false;
+		}
+		else
+		{
+			//Initialize PNG loading
+			int imgFlags = IMG_INIT_PNG;
+			if (!(IMG_Init(imgFlags) & imgFlags))
+			{
+				printf("SDL_image could not initialize! SDL_image Error: %s\n", IMG_GetError());
+				success = false;
+			}
+			else
+			{
+				//Get window surface
+				gScreenSurface2 = SDL_GetWindowSurface(EngineWindow2);
+			}
+
+			//Create context
+			EngineContext2 = SDL_GL_CreateContext(EngineWindow2);
+			if (EngineContext2 == NULL)
+			{
+				printf("OpenGL context could not be created! SDL Error: %s\n", SDL_GetError());
+				success = false;
+			}
+			else
+			{
+				//ActivateShader Vsync
+				if (SDL_GL_SetSwapInterval(1) < 0)
+				{
+					printf("Warning: Unable to set VSync! SDL Error: %s\n", SDL_GetError());
+				}
+
+				//Initialize OpenGL
+				if (!InitOpenGL())
+				{
+					printf("Unable to initialize OpenGL!\n");
+					success = false;
+				}
+
+
+			}
+		}
+	}
+
+	return success;
+}
+
+// Macro to draw the quad.
+// Performance can be achieved by making a call list.
+// To make it simple i am not using that now :-)
+SDL_Event EngineEvent2;
+GLfloat dOrthoSize = 1.0f;
+#define MAP_3DTEXT( TexIndex ) \
+            glTexCoord3f(0.0f, 0.0f, ((float)TexIndex+1.0f)/2.0f);  \
+        glVertex3f(-dOrthoSize,-dOrthoSize,TexIndex);\
+        glTexCoord3f(1.0f, 0.0f, ((float)TexIndex+1.0f)/2.0f);  \
+        glVertex3f(dOrthoSize,-dOrthoSize,TexIndex);\
+        glTexCoord3f(1.0f, 1.0f, ((float)TexIndex+1.0f)/2.0f);  \
+        glVertex3f(dOrthoSize,dOrthoSize,TexIndex);\
+        glTexCoord3f(0.0f, 1.0f, ((float)TexIndex+1.0f)/2.0f);  \
+        glVertex3f(-dOrthoSize,dOrthoSize,TexIndex);
+glm::vec2 rotRef;
+void Render()
+{
+	if (SDL_PollEvent(&(EngineEvent2)) != 0)
+	{
+		if (EngineEvent2.type == SDL_QUIT)
+		{
+		}
+		//If a mouse button was pressed
+
+			if (EngineEvent2.button.button == SDL_BUTTON_LEFT)
+			{
+				SDL_GetMouseState(&x, &y);
+
+				mfRot[0] = rotRef.y - y;
+				mfRot[1] = rotRef.x - x;
+				mfRot[2] = 0;
+
+				glMatrixMode(GL_MODELVIEW);
+				glLoadMatrixd(mdRotation);
+				glRotated(mfRot[0], 1.0f, 0, 0);
+				glRotated(mfRot[1], 0, 1.0f, 0);
+				glRotated(mfRot[2], 0, 0, 1.0f);
+
+				glGetDoublev(GL_MODELVIEW_MATRIX, mdRotation);
+				glLoadIdentity();
+
+				rotRef.x = x;
+				rotRef.y = y;
+			}
+		
+
+	}
+
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	glEnable(GL_ALPHA_TEST);
+	glAlphaFunc(GL_GREATER, 0.05f);
+
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+	glMatrixMode(GL_TEXTURE);
+	glLoadIdentity();
+
+	// Translate and make 0.5f as the center 
+	// (texture co ordinate is from 0 to 1. so center of rotation has to be 0.5f)
+	glTranslatef(0.5f, 0.5f, 0.5f);
+
+	// A scaling applied to normalize the axis 
+	// (Usually the number of slices will be less so if this is not - 
+	// normalized then the z axis will look bulky)
+	// Flipping of the y axis is done by giving a negative value in y axis.
+	// This can be achieved either by changing the y co ordinates in -
+	// texture mapping or by negative scaling of y axis
+	glScaled((float)500 / (float)500,
+		-1.0f*(float)500 / (float)(float)512,
+		(float)500 / (float)499);
+
+	glMultMatrixd(mdRotation);
+
+	glTranslatef(-0.5f, -0.5f, -0.5f);
+
+	glEnable(GL_TEXTURE_3D);
+	glBindTexture(GL_TEXTURE_3D, 1);
+	for (float fIndx = -1.0f; fIndx <= 1.0f; fIndx += 0.01f)
+	{
+		glBegin(GL_QUADS);
+		MAP_3DTEXT(fIndx);
+		glEnd();
+	}
+
+	SDL_GL_SwapWindow(EngineWindow2);
+}
+
+void InitData(std::vector<GLchar> &testData)
+{
+	int texID = 0;
+	glGenTextures(1, (GLuint*)&texID);
+
+	glBindTexture(GL_TEXTURE_3D, texID);
+	glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_BORDER);
+	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+	glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA, 500, 512, 499, 0,
+		GL_RGBA, GL_UNSIGNED_BYTE, testData.data());
+	glBindTexture(GL_TEXTURE_3D, 0);
+
+	mdRotation[0] = mdRotation[5] = mdRotation[10] = mdRotation[15] = 1.0;
+	mdRotation[1] = mdRotation[2] = mdRotation[3] = mdRotation[4] = 0.0f;
+	mdRotation[6] = mdRotation[7] = mdRotation[8] = mdRotation[9] = 0.0f;
+	mdRotation[11] = mdRotation[12] = mdRotation[13] = mdRotation[14] = 0.0f;
+}
+
 int main(int argc, char *argv[])
 {
 	Engine engine;
@@ -326,14 +547,26 @@ int main(int argc, char *argv[])
 	engine.OCT.LoadOCTData();
 	engine.OCT.OpenCLCompute();
 
-	engine.InitalizeEngine();
+	//engine.InitalizeEngine();
+
+	//engine.TerminateEngine = false;
+
+	//while(!engine.TerminateEngine)
+	//{
+	//	engine.UpdateEngine(0);
+	//	engine.RenderEngine();
+	//}
+
+	std::vector<GLchar> testData(engine.OCT.CompositeResults.begin(),
+		engine.OCT.CompositeResults.begin()+((500*512*4))*499);
+
+	InitializeTest();
+	InitData(testData);
 
 	engine.TerminateEngine = false;
-
-	while(!engine.TerminateEngine)
+	while (!engine.TerminateEngine)
 	{
-		engine.UpdateEngine(0);
-		engine.RenderEngine();
+		Render();
 	}
 
 	return 0;
