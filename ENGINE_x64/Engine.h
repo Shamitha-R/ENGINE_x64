@@ -14,6 +14,7 @@ class Engine
 		bool TerminateEngine;
 		UI EngineUI;
 		EngineOCT OCT;
+		EngineRenderer EngineRenderer;
 
 		std::vector<EngineObject*> EngineSlices;
 		int RenderDepth;
@@ -24,4 +25,5 @@ class Engine
 		void InitalizeEngine();
 		void UpdateEngine(GLfloat engineTime);
 		void RenderEngine();
+		void PassRenderData();
 };

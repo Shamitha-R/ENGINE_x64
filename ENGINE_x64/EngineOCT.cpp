@@ -967,7 +967,7 @@ int SetPostProcessingKernelParameters()
 
 	return err;
 }
-int SetCorrelationParameters()
+int SetCorrelationParameters(cl_uint kernelSizeX,cl_uint kernelsizeY)
 {
 	cl_int err = 0;
 	err = clSetKernelArg(corrKernel, 0, sizeof(cl_mem), &bScanCorrData);
@@ -975,7 +975,13 @@ int SetCorrelationParameters()
 	size_t totalBScans = _numBScans;
 	err = clSetKernelArg(corrKernel, 1, sizeof(cl_uint), &totalBScans);
 	if (err != CL_SUCCESS) return err;
-	err = clSetKernelArg(corrKernel, 2, sizeof(cl_mem), &deviceCorrelationMap);
+
+	err = clSetKernelArg(corrKernel, 2, sizeof(cl_uint), &kernelSizeX);
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(corrKernel, 3, sizeof(cl_uint), &kernelsizeY);
+	if (err != CL_SUCCESS) return err;
+
+	err = clSetKernelArg(corrKernel, 4, sizeof(cl_mem), &deviceCorrelationMap);
 	if (err != CL_SUCCESS) return err;
 
 	return err;
@@ -995,7 +1001,7 @@ int SetFilterParameters()
 	if (err != CL_SUCCESS) return err;
 	err = clSetKernelArg(avgKernel, 1, sizeof(cl_uint), &totalBScans);
 	if (err != CL_SUCCESS) return err;
-	err = clSetKernelArg(avgKernel, 2, sizeof(cl_uint), &deviceAvgResults);
+	err = clSetKernelArg(avgKernel, 2, sizeof(cl_mem), &deviceAvgResults);
 	if (err != CL_SUCCESS) return err;
 
 	//Composite Kernel Parameters
@@ -1117,7 +1123,9 @@ int clOCTInit(cl_uint clDeviceIndex,			// Index in the device list of the OpenCL
 	unsigned int imageFormatStride,
 	size_t preProcessingkernelWorkgroupSize,
 	size_t postProcessingkernelWorkgroupSize,
-	char* compilerOptions) {
+	char* compilerOptions,
+	cl_uint kernelSizeX,
+	cl_uint kernelSizeY) {
 
 	clfftStatus status;
 	int clErr;
@@ -1199,7 +1207,7 @@ int clOCTInit(cl_uint clDeviceIndex,			// Index in the device list of the OpenCL
 	if (clErr != CL_SUCCESS) return clErr;
 	clErr = SetPostProcessingKernelParameters();
 	if (clErr != CL_SUCCESS) return clErr;
-	clErr = SetCorrelationParameters();
+	clErr = SetCorrelationParameters(kernelSizeX,kernelSizeY);
 	if (clErr != CL_SUCCESS) return clErr;
 	clErr = SetFilterParameters();
 	if (clErr != CL_SUCCESS) return clErr;
@@ -2536,6 +2544,9 @@ void EngineOCT::OpenCLCompute()
 	float bmpMinVal = -155;
 	float bmpMaxVal = -55;
 
+	this->KernelSizeX = 6;
+	this->KernelSizeY = 6;
+
 	unsigned int saveBmp = true;
 
 	size_t loglen = 1000000;
@@ -2630,7 +2641,6 @@ void EngineOCT::OpenCLCompute()
 		resampTable[i] = ResamplingTableData[i];
 		refSpec[i] = ReferenceSpectrumData[i];
 		refAScan[i] = ReferenceAScanData[i];
-
 	}
 
 	res = clOCTInit(
@@ -2650,7 +2660,9 @@ void EngineOCT::OpenCLCompute()
 		stride,
 		localWorkSize,
 		localWorkSize,
-		compilerOptions
+		compilerOptions,
+		KernelSizeX,
+		KernelSizeY
 		);
 
 	if (res != CL_SUCCESS)
@@ -2664,7 +2676,7 @@ void EngineOCT::OpenCLCompute()
 		printf("Processing %i B-Scans in batches of %i, each batch comprising %i A-Scans...\n",
 			totalBScans, numBScansPerBatch, totalAScans);
 
-		//numBScanProcessingIteratations = 1;
+		//numBScanProcessingIteratations = 3;
 
 		for (i = 0; i < numBScanProcessingIteratations; i++)
 		{
@@ -2749,86 +2761,12 @@ void EngineOCT::OpenCLCompute()
 
 		printf("Processing B Scans: SUCCESS \n");
 
-		clock_t begin = clock();
-
-		for (int batchNum = 0; batchNum < numBScanProcessingIteratations; batchNum++) {
-
-			printf("Performing Cross Correlation batch %d of %d \n",
-				(batchNum + 1), numBScanProcessingIteratations);
-
-			cl_uint batchSizePlus;
-			unsigned char* tempBScanData;
-			int volumnSizePlus;
-			int size;
-
-
-			if (batchNum == numBScanProcessingIteratations - 1)
-			{
-				//Copy top 50 bScans to GPU
-				batchSizePlus = _numBScans;
-				volumnSizePlus = 500 * 512 * batchSizePlus * 3;
-
-				size = (sizeof(unsigned char) * volumnSizePlus);
-				tempBScanData = (unsigned char*)malloc(size);
-
-				int index00 = (_numBScans * batchNum);
-				int index01 = (_numBScans * (batchNum + 1));
-
-				std::copy(BScanResults.begin() + (index00 * 512 * 500 * 3),
-					BScanResults.begin() + (index01 * 512 * 500 * 3),
-					tempBScanData);
-
-			}
-			else
-			{
-				//Copy top 51 bScans to GPU
-				batchSizePlus = _numBScans + 1;
-				volumnSizePlus = 500 * 512 * batchSizePlus * 3;
-
-				size = (sizeof(unsigned char) * volumnSizePlus);
-				tempBScanData = (unsigned char*)malloc(size);
-
-				int index00 = (_numBScans * batchNum);
-				int index01 = (_numBScans * (batchNum + 1)) + 1;
-
-				std::copy(BScanResults.begin() + (index00 * 512 * 500 * 3),
-					BScanResults.begin() + (index01 * 512 * 500 * 3),
-					tempBScanData);
-
-			}
-
-			res = clSetKernelArg(corrKernel, 1, sizeof(cl_uint), &batchSizePlus);
-
-			res = clEnqueueWriteBuffer(_commandQueue,
-				bScanCorrData,
-				CL_FALSE,
-				0,
-				size,
-				tempBScanData,
-				0,
-				NULL,
-				NULL);
-
-			res = ComputeCorrelation(batchNum, batchSizePlus,this->CorrelationResults);
-
-			//
-
-			res = FilterPostProcess(batchNum,batchSizePlus,this->CorrelationResults,
-				this->CompositeResults);
-
-			delete(tempBScanData);
-		}
-
-
-		clock_t end = clock();
-
-		double elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
-
-		//std::cout << elapsed_secs;
+		this->numBScanProcessingIteratations = numBScanProcessingIteratations;
+		this->ComputeCrossCorrelation();
 	}
 
 	fclose(inputSpecFile);
-	clOCTDispose();
+	//clOCTDispose();
 	free(inputSpectra);
 	free(resampTable);
 	free(refSpec);
@@ -2854,14 +2792,79 @@ void EngineOCT::OpenCLCompute()
 	printf("CL compute Done.\n");
 }
 
-//int main(int argc, char *argv[])
-//{
-//	EngineOCT engineOCT;
-//	engineOCT.LoadOCTData();
-//	engineOCT.OpenCLCompute();
-//
-//	EngineRendering(engineOCT);
-//
-//	return 0;
-//}
+void EngineOCT::ComputeCrossCorrelation()
+{
+	int res;
+	this->CompositeResults.clear();
+	this->CompositeResults.clear();
+
+	for (int batchNum = 0; batchNum < numBScanProcessingIteratations; batchNum++) {
+
+		printf("Performing Cross Correlation batch %d of %d \n",
+			(batchNum + 1), numBScanProcessingIteratations);
+
+		cl_uint batchSizePlus;
+		unsigned char* tempBScanData;
+		int volumnSizePlus;
+		int size;
+
+
+		if (batchNum == numBScanProcessingIteratations - 1)
+		{
+			//Copy top 50 bScans to GPU
+			batchSizePlus = _numBScans;
+			volumnSizePlus = 500 * 512 * batchSizePlus * 3;
+
+			size = (sizeof(unsigned char) * volumnSizePlus);
+			tempBScanData = (unsigned char*)malloc(size);
+
+			int index00 = (_numBScans * batchNum);
+			int index01 = (_numBScans * (batchNum + 1));
+
+			std::copy(BScanResults.begin() + (index00 * 512 * 500 * 3),
+				BScanResults.begin() + (index01 * 512 * 500 * 3),
+				tempBScanData);
+
+		}
+		else
+		{
+			//Copy top 51 bScans to GPU
+			batchSizePlus = _numBScans + 1;
+			volumnSizePlus = 500 * 512 * batchSizePlus * 3;
+
+			size = (sizeof(unsigned char) * volumnSizePlus);
+			tempBScanData = (unsigned char*)malloc(size);
+
+			int index00 = (_numBScans * batchNum);
+			int index01 = (_numBScans * (batchNum + 1)) + 1;
+
+			std::copy(BScanResults.begin() + (index00 * 512 * 500 * 3),
+				BScanResults.begin() + (index01 * 512 * 500 * 3),
+				tempBScanData);
+
+		}
+
+		res = clSetKernelArg(corrKernel, 1, sizeof(cl_uint), &batchSizePlus);
+
+		res = clEnqueueWriteBuffer(_commandQueue,
+			bScanCorrData,
+			CL_FALSE,
+			0,
+			size,
+			tempBScanData,
+			0,
+			NULL,
+			NULL);
+
+		res = ComputeCorrelation(batchNum, batchSizePlus, this->CorrelationResults);
+
+		//
+
+		res = FilterPostProcess(batchNum, batchSizePlus, this->CorrelationResults,
+			this->CompositeResults);
+
+		delete(tempBScanData);
+	}
+}
+
 

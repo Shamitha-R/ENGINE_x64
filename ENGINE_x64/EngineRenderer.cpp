@@ -45,7 +45,7 @@ bool EngineRenderer::InitializeEngine()
 		EngineWindow = SDL_CreateWindow("ENGINE_WINx64",
 			SDL_WINDOWPOS_UNDEFINED,
 			SDL_WINDOWPOS_UNDEFINED,
-			SCREENWIDTH, SCREENHEIGHT,
+			1280, 720,
 			SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN);
 
 		if (EngineWindow == NULL)
@@ -102,59 +102,29 @@ bool EngineRenderer::InitializeOpenGL()
 {
 	printf("Initializing OpenGL\n");
 
-	bool success = true;
 	GLenum error = GL_NO_ERROR;
 
-	glMatrixMode(GL_PROJECTION);
-	glLoadIdentity();
+	glClearColor(0.f, 0.f, 0.f, 1.0f);
 
-	error = glGetError();
-	if (error != GL_NO_ERROR)
+	glewExperimental = GL_TRUE;
+	error = glewInit();
+	if (GL_TRUE != glewGetExtension("GL_EXT_texture3D"))
 	{
-		success = false;
+
 	}
 
-	//Initialize Modelview Matrix
+	glViewport(0, 0, 1280, 720);
+	glMatrixMode(GL_PROJECTION);
+	float aspect = (float)1280 / (float)720;
+	glOrtho(-aspect, aspect, -1, 1, -1, 1);
+
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
 
-	//Check for error
-	error = glGetError();
-	if (error != GL_NO_ERROR)
-	{
-		//printf("Error initializing OpenGL! %s\n", gluErrorString(error));
-		success = false;
-	}
 
-	//Initialize clear color
-	glClearColor(0.f, 0.f, 0.f, 1.f);
+	printf("OpenGL Device: (%s): \n", glGetString(GL_RENDERER));
 
-	//Check for error
-	error = glGetError();
-	if (error != GL_NO_ERROR)
-	{
-		//printf("Error initializing OpenGL! %s\n", gluErrorString(error));
-		success = false;
-	}
-
-	glewExperimental = GL_TRUE;
-	// Initialize GLEW
-	GLenum err = glewInit();
-	if (GLEW_OK != err)
-	{
-		/* Problem: glewInit failed, something is seriously wrong. */
-		//printf("Error: %s\n", glewGetErrorString(err));
-	}
-
-	//glEnable(GL_DEPTH_TEST);
-
-	//glEnable(GL_CULL_FACE);
-	//glCullFace(GL_BACK);
-
-	//glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-	//glEnable(GL_BLEND);
-
-	return success;
+	return true;
 }
 
 void EngineRenderer::HandleInput(unsigned char targetKey, int xPos, int yPos)
@@ -176,5 +146,27 @@ void EngineRenderer::Render()
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 
+void EngineRenderer::InitializeRenderData(std::vector<GLchar> &renderData)
+{
+	int texID = 0;
+	glGenTextures(1, (GLuint*)&texID);
+
+	glBindTexture(GL_TEXTURE_3D, texID);
+	glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_BORDER);
+	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+	glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA, 500, 512, 450, 0,
+		GL_RGBA, GL_UNSIGNED_BYTE, renderData.data());
+	glBindTexture(GL_TEXTURE_3D, 0);
+
+	ObjectOrientation[0] = ObjectOrientation[5] = ObjectOrientation[10] = ObjectOrientation[15] = 1.0;
+	ObjectOrientation[1] = ObjectOrientation[2] = ObjectOrientation[3] = ObjectOrientation[4] = 0.0f;
+	ObjectOrientation[6] = ObjectOrientation[7] = ObjectOrientation[8] = ObjectOrientation[9] = 0.0f;
+	ObjectOrientation[11] = ObjectOrientation[12] = ObjectOrientation[13] = ObjectOrientation[14] = 0.0f;
+}
 
 

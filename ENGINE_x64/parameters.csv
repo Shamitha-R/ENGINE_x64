@@ -1,4 +1,4 @@
-Date and Time, 04/11/2015 13:22:10
+Date and Time, 06/11/2015 14:38:05
 Total number of B-Scans, 500
 Total number of A-Scans per B-Scan, 500
 A-Scan Averaging Factor, 1
@@ -10,12 +10,12 @@ Minimum scanner voltage in X (across B-Scan width), -1
 Maximum scanner voltage in X (across B-Scan width), 1
 Minimum scanner voltage in Y, -1
 Maximum scanner voltage in Y, 1
-Air temperature, 21.8221817016602
-Immersion temperature, 21.8514823913574
-Notes, Right TBI
+Air temperature, 21.3385620117188
+Immersion temperature, 21.8315887451172
+Notes, Left TBI
 Window Type, Gaussian
-Min. Value, -160
-Max. Value, -60
-X Translation Stage Position, 100.25
-Y Translation Stage Position, 266.85
-Z Translation Stage Position, 10.75
+Min. Value, -166
+Max. Value, -66
+X Translation Stage Position, 98
+Y Translation Stage Position, 267.25
+Z Translation Stage Position, 9

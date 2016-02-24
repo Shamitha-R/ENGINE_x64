@@ -29,8 +29,13 @@ public:
 	const int ASCANAVERAGINGFACTOR = 1;
 	const int BSCANAVERAGINGFACTOR = 1;
 
+	int KernelSizeX;
+	int KernelSizeY;
+	int numBScanProcessingIteratations;
+
 	void LoadOCTData();
 	void OpenCLCompute();
+	void ComputeCrossCorrelation();
 
 private:
 	void LoadFileData(std::string fileName, std::vector<float> &data);

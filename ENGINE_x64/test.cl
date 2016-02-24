@@ -8,6 +8,7 @@
 #define WINDOW_TYPE_BLACKMAN 2
 #define WINDOW_TYPE_GAUSSIAN 3
 #define MAX_FFT_LEN 1024
+#define ZERO_THRESHOLD 0.001f
 
 void GPUResample(
 	__global float* spectra,
@@ -363,12 +364,14 @@ __kernel void octPostProcessingKernel(
 
 __kernel void corrKernel(__global unsigned char* bScanData, 
 	const int bScanCount,
+	const unsigned int kernelX,
+	const unsigned int kernelY, 
 	__global float* correlationResults){
 
 	int bScanNum = 0;
 
-	int kernelX = 2;
-	int kernelY = 2;
+	//int kernelX = 6;
+	//int kernelY = 6;
 	int bScanSize = 500*512*3; // with 3 colour
 
 	float i1Mean = 0.0f;
@@ -388,8 +391,8 @@ __kernel void corrKernel(__global unsigned char* bScanData,
 
 	int kernelID = get_global_id(0);
 
-	int imagePonts00[2*2];
-	int imagePonts01[2*2];
+	int imagePonts00[20*20];
+	int imagePonts01[20*20];
 	int i,row,col;
 	int sum00,sum01;
 
@@ -496,8 +499,8 @@ __kernel void compositeKernel(__global float* avgBScanData,
 		}
 
 		//Replace Correlation 
-		if (kernelID > (2 * 500)) {
-			if (correlationResults[kernelID + (512 * 500 * bScanNum) - (1000)] < 
+		if (kernelID > (1 * 500)) {
+			if (correlationResults[kernelID + (512 * 500 * bScanNum) - (500)] < 
 				corrNoiseList[bScanNum]) {
 				corrZero = true;
 			}
@@ -793,8 +796,6 @@ __kernel void octCorrelationKernel(
 
 
 
-
-
 //
 // Polynomial resampling using linear interpolation
 //
@@ -897,6 +898,7 @@ void GPUResample(
 	resampledSpectra[2 * inputSpectraLength - 2] = 0.0f;
 }
 
+
 void preProcess(
 	__global const short* spectrum,
 	__global const float* resamplingTable,
@@ -909,7 +911,7 @@ void preProcess(
 	)
 {
 	//
-	// Divide reference spectrum by the measured spectra
+	// Divide reference spectrum by the measured spectra and subtract the average
 	//
 	__private unsigned int i;
 	__private float ii;           // Floating point index
@@ -924,6 +926,10 @@ void preProcess(
 	__private float specVal;
 	__private float realSpec;
 	__private float imagSpec;
+	__private float ave;
+	__private float rollingAve;
+	__private unsigned int smoothLen;
+	__private unsigned int s;
 	//
 	// Configure window parameters
 	//
@@ -949,11 +955,13 @@ void preProcess(
 		a1 = N / 6.0f;
 		a2 = a1*a1;
 	}
-
 	//
+	ave = 0.0f; // Average is zero
+	smoothLen = 2; // Rolling average length for spectral smoothing
+				   //
 	for (i = 0; i<inputSpectraLength; i++)
 	{
-		ii = (float)i;
+
 		specVal = (float)spectrum[i];      // Reference the global memory array only once
 										   //
 										   // Set the imaginary part to zero
@@ -968,7 +976,7 @@ void preProcess(
 		{
 			refSpecVal = fabs(referenceSpectrum[i]);
 			//
-			if (refSpecVal > 0.1)
+			if (refSpecVal > ZERO_THRESHOLD)
 			{
 				//preProcessedCmplxSpectrum[2*i]
 				realSpec = specVal / refSpecVal - 1.0f;
@@ -987,9 +995,20 @@ void preProcess(
 			//preProcessedCmplxSpectrum[2*i] = (float)spectrum[i];
 			realSpec = specVal;
 		}
-		//
-		// Apply a window function
-		//
+		ave += realSpec; // Add up the spectrum values to get an average
+		preProcessedCmplxSpectrum[2 * i] = realSpec;   // Store the modified spectrum values
+	}
+	ave = ave / (float)inputSpectraLength; // Find average spectrum
+										   //
+										   // Loop again applying the filter
+										   //
+	for (i = 0; i<inputSpectraLength; i++)
+	{
+		ii = (float)i;
+		realSpec = preProcessedCmplxSpectrum[2 * i] - ave; // Mean centre the spectrum
+														   //
+														   // Apply a window function
+														   //
 		if (windowType == WINDOW_TYPE_HANN)
 		{
 			//preProcessedCmplxSpectrum[2*i]
@@ -1008,10 +1027,29 @@ void preProcess(
 			realSpec *= native_exp(-(a3*a3) / a2);
 		}
 		//
-		// Use the imaginary part as a workspace
+		// Try smoothing the spectrum using a rolling mean
 		//
-		preProcessedCmplxSpectrum[2 * i] = realSpec;
-		preProcessedCmplxSpectrum[2 * i + 1] = realSpec;
+		preProcessedCmplxSpectrum[2 * i + 1] = realSpec; // Store the un-smoothed data in the imaginary part as work space
+		if ((smoothLen > 1) && (i >= (smoothLen - 1)))
+		{
+			rollingAve = 0.0f;
+			for (s = 0; s<smoothLen; s++)
+			{
+				rollingAve += preProcessedCmplxSpectrum[2 * (i - (smoothLen - 1) + s) + 1]; // Add up the unsmoothed spectral pixels
+			}
+			//
+			// Store the rolling average in the real part
+			//
+			preProcessedCmplxSpectrum[2 * i] = rollingAve / (float)smoothLen;
+		}
+		else
+		{
+			preProcessedCmplxSpectrum[2 * i] = realSpec;
+		}
+		//
+		// Use the imaginary part as a workspace - containing same as real part for now.
+		//
+		preProcessedCmplxSpectrum[2 * i + 1] = preProcessedCmplxSpectrum[2 * i];
 	}
 	//
 	// Resample
@@ -1048,3 +1086,156 @@ void preProcess(
 
 
 }
+
+
+//void preProcess(
+//	__global const short* spectrum,
+//	__global const float* resamplingTable,
+//	__global const float* interpolationMatrix,
+//	__global const float* referenceSpectrum,
+//	__global float* preProcessedCmplxSpectrum,
+//	unsigned int inputSpectraLength,
+//	unsigned int outputAScanLength,
+//	unsigned int windowType
+//	)
+//{
+//	//
+//	// Divide reference spectrum by the measured spectra
+//	//
+//	__private unsigned int i;
+//	__private float ii;           // Floating point index
+//	__private float N = (float)inputSpectraLength;
+//	__private float W;
+//	__private float a0;
+//	__private float a1;
+//	__private float a2;
+//	__private float a3;
+//	__private float A, B, C;
+//	__private float refSpecVal;
+//	__private float specVal;
+//	__private float realSpec;
+//	__private float imagSpec;
+//	//
+//	// Configure window parameters
+//	//
+//	if (windowType == WINDOW_TYPE_HANN)
+//	{
+//		W = N - 1.0f;
+//		A = 2.0f * M_PI_F / W;
+//	}
+//	if (windowType == WINDOW_TYPE_BLACKMAN)
+//	{
+//		a0 = 0.355768;
+//		a1 = 0.487396;
+//		a2 = 0.144232;
+//		a3 = 0.012604;
+//		W = N - 1.0f;
+//		A = 2.0f * M_PI_F / W;
+//		B = 4.0f * M_PI_F / W;
+//		C = 6.0f * M_PI_F / W;
+//	}
+//	else if (windowType == WINDOW_TYPE_GAUSSIAN)
+//	{
+//		a0 = N / 2.0f;
+//		a1 = N / 6.0f;
+//		a2 = a1*a1;
+//	}
+//
+//	//
+//	for (i = 0; i<inputSpectraLength; i++)
+//	{
+//		ii = (float)i;
+//		specVal = (float)spectrum[i];      // Reference the global memory array only once
+//										   //
+//										   // Set the imaginary part to zero
+//										   //
+//		imagSpec = 0.0f;
+//		//
+//		//preProcessedCmplxSpectrum[2*i+1] = 0.0f;
+//		//
+//		// Deconvolve the reference spectrum from the real part
+//		//
+//		if (referenceSpectrum != NULL)
+//		{
+//			refSpecVal = fabs(referenceSpectrum[i]);
+//			//
+//			if (refSpecVal > 0.1)
+//			{
+//				//preProcessedCmplxSpectrum[2*i]
+//				realSpec = specVal / refSpecVal - 1.0f;
+//			}
+//			else
+//			{
+//				//preProcessedCmplxSpectrum[2*i]
+//				realSpec = 0.0f;
+//			}
+//		}
+//		else
+//		{
+//			//
+//			// If no reference spectrum, then ignore deconvolution
+//			//
+//			//preProcessedCmplxSpectrum[2*i] = (float)spectrum[i];
+//			realSpec = specVal;
+//		}
+//		//
+//		// Apply a window function
+//		//
+//		if (windowType == WINDOW_TYPE_HANN)
+//		{
+//			//preProcessedCmplxSpectrum[2*i]
+//			realSpec *= 0.5f*(1.0f - native_cos(A * ii));
+//		}
+//		else if (windowType == WINDOW_TYPE_BLACKMAN)
+//		{
+//			//preProcessedCmplxSpectrum[2*i]
+//			realSpec *= a0 - a1 * native_cos(A * ii) + a2 * native_cos(B * ii) - a3 * native_cos(C * ii);
+//
+//		}
+//		else if (windowType == WINDOW_TYPE_GAUSSIAN)
+//		{
+//			a3 = ii - a0;
+//			//preProcessedCmplxSpectrum[2*i]
+//			realSpec *= native_exp(-(a3*a3) / a2);
+//		}
+//		//
+//		// Use the imaginary part as a workspace
+//		//
+//		preProcessedCmplxSpectrum[2 * i] = realSpec;
+//		preProcessedCmplxSpectrum[2 * i + 1] = realSpec;
+//	}
+//	//
+//	// Resample
+//	//
+//	//
+//	// If a resampling table has been provided, then resample the spectra - only the real part
+//	//
+//	if (resamplingTable != NULL)
+//	{
+//		//GPUResample(preProcessedCmplxSpectrum, resamplingTable, inputSpectraLength, preProcessedCmplxSpectrum);
+//		GPUResample(&preProcessedCmplxSpectrum[1], resamplingTable, interpolationMatrix, inputSpectraLength, &preProcessedCmplxSpectrum[0]);
+//	}
+//	//
+//	// Set imaginary part to zero
+//	//
+//	for (i = 0; i<inputSpectraLength; i++)
+//	{
+//		preProcessedCmplxSpectrum[2 * i + 1] = 0.0f;
+//	}
+//
+//	//
+//	// Finally, zero pad if necessary
+//	//
+//	if (outputAScanLength > inputSpectraLength)
+//	{
+//		for (i = inputSpectraLength - 1; i<outputAScanLength; i++)
+//		{
+//			preProcessedCmplxSpectrum[2 * i] = 0.0f;
+//			preProcessedCmplxSpectrum[2 * i + 1] = 0.0f;
+//
+//		}
+//	}
+//
+//
+//
+//}
