@@ -1634,7 +1634,7 @@ int FilterPostProcess(int batchNum,int batchSize,std::vector<float> &correlation
 
 		std::vector<float> noiseDataBScan;
 
-		for (int i = 0; i < 51; i++)
+		for (int i = 0; i < batchSize; i++)
 		{
 			noiseDataBScan.insert(noiseDataBScan.end(),
 				&avgBScan[((i * 500) + topIgnoreSize + dataIgnoreSize)],
@@ -1837,7 +1837,7 @@ int ComputeCorrelation(int batchNum, int batchSize,std::vector<float>& correlati
 {
 	bool saveBMP = true;
 	cl_int err;
-	size_t numWorkItemsPerGroup = 1;
+	size_t numWorkItemsPerGroup =256;
 	//    size_t numWorkGroups;
 	size_t totalWorkItems = 500 * 512;
 
@@ -1846,7 +1846,7 @@ int ComputeCorrelation(int batchNum, int batchSize,std::vector<float>& correlati
 		return err;
 
 	float* correlationMap;
-	correlationMap = (float*)malloc(sizeof(float) * 25600000);
+	correlationMap = (float*)malloc(sizeof(float) * _totalAScans * _outputAScanLength);
 
 	err = clEnqueueReadBuffer(_commandQueue, deviceCorrelationMap, CL_TRUE, 0, sizeof(float)*_totalAScans * _outputAScanLength, correlationMap, 0, NULL, NULL);
 	if (err != CL_SUCCESS) return err;
@@ -2535,7 +2535,7 @@ void EngineOCT::OpenCLCompute()
 	unsigned int outputImageHeight;
 
 	unsigned int totalBScans = 500;
-	unsigned int numBScansPerBatch = 50;
+	unsigned int numBScansPerBatch = 100;
 	unsigned int numBScanProcessingIteratations = (unsigned int)floor(totalBScans / numBScansPerBatch);
 	unsigned int numAScans = 500;
 	unsigned int ascanAve = 1;

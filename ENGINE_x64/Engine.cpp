@@ -347,7 +347,7 @@ void Render(SDL_Window* EngineWindow,double mdRotation[16])
 	// texture mapping or by negative scaling of y axis
 	glScaled(((float)500 / (float)500)*2.0f,
 		(-1.0f*(float)500 / (float)(float)512)*2.0f,
-			((float)500 / (float)450)*2.0f);
+			((float)500 / (float)490)*2.0f);
 
 	glMultMatrixd(mdRotation);
 
@@ -382,7 +382,7 @@ int main(int argc, char *argv[])
 	engineUI.InitialiseUI(1280, 720, engine.OCT,engine.EngineRenderer);
 
 	std::vector<GLchar> testData(engine.OCT.CompositeResults.begin(),
-		engine.OCT.CompositeResults.begin() + ((500 * 512 * 4)) * 450);
+		engine.OCT.CompositeResults.begin() + ((500 * 512 * 4)) * 490);
 	
 	engine.EngineRenderer.InitializeRenderData(testData);
 
