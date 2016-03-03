@@ -151,6 +151,8 @@ void EngineRenderer::InitializeRenderData(std::vector<GLchar> &renderData)
 	int texID = 0;
 	glGenTextures(1, (GLuint*)&texID);
 
+	texID = 1;
+
 	glBindTexture(GL_TEXTURE_3D, texID);
 	glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
@@ -159,7 +161,7 @@ void EngineRenderer::InitializeRenderData(std::vector<GLchar> &renderData)
 	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
-	glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA, 500, 512, 490, 0,
+	glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA, 500, 512, 400, 0,
 		GL_RGBA, GL_UNSIGNED_BYTE, renderData.data());
 	glBindTexture(GL_TEXTURE_3D, 0);
 

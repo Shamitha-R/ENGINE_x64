@@ -1,8 +1,10 @@
 #pragma once
 
 #include <AntTweakBar.h>
-#include "EngineOCT.h"
-#include "EngineRenderer.h"
+#include "Engine.h"
+
+
+class Engine;
 
 class UI
 {
@@ -10,6 +12,7 @@ public:
 	UI();
 	~UI();
 
-	void InitialiseUI(int screenWidth, int screenHeight,EngineOCT &oct,EngineRenderer &renderer);
+	void InitialiseUI(int screenWidth, int screenHeight,
+		Engine &engine);
 };
 

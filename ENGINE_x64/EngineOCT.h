@@ -31,6 +31,8 @@ public:
 
 	int KernelSizeX;
 	int KernelSizeY;
+	int FilterWindowX;
+	int FilterWindowY;
 	int numBScanProcessingIteratations;
 
 	void LoadOCTData();

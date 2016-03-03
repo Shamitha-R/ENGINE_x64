@@ -1,6 +1,5 @@
 #include "UI.h"
 
-
 UI::UI()
 {
 }
@@ -24,11 +23,12 @@ void TW_CALL ExecuteOCTProccessing(void *clientData)
 
 void TW_CALL ComputeCorrelation(void *clientData)
 {
-	EngineOCT *oct = (EngineOCT *)(clientData);
-	oct->ComputeCrossCorrelation();
+	Engine *engine = (Engine *)(clientData);
+	engine->OCT.ComputeCrossCorrelation();
+	engine->PassRenderData();
 }
 
-void UI::InitialiseUI(int screenWidth,int screenHeight,EngineOCT &oct,EngineRenderer &renderer)
+void UI::InitialiseUI(int screenWidth,int screenHeight, Engine &engine)
 {
 	TwBar *bar;
 	TwBar *parametersBar;
@@ -41,19 +41,19 @@ void UI::InitialiseUI(int screenWidth,int screenHeight,EngineOCT &oct,EngineRend
 	// Create a tweak bar
 	bar = TwNewBar("Functions");
 	TwDefine(" GLOBAL help='Test Functions' "); // Message added to the help bar.
-	TwAddButton(bar, "LoadData", LoadDataFunc, &oct, " label='Load OCT Data' ");
-	TwAddButton(bar, "ExecuteProcessing", ExecuteOCTProccessing, &oct, " label='Execute Processing' ");
-	TwAddButton(bar, "OutputBScans", ExecuteOCTProccessing, &oct, " label='Output BScans' ");
-	TwAddButton(bar, "OutputCResults", ExecuteOCTProccessing, &oct, " label='Output Correlation Results' ");
-	TwAddButton(bar, "OutputComposite", ExecuteOCTProccessing, &oct, " label='Output Vasculature' ");
-	TwAddButton(bar, "ComputeCorrelation", ComputeCorrelation, &oct, " label='Compute Correlation' ");
+	TwAddButton(bar, "LoadData", LoadDataFunc, &engine.OCT, " label='Load OCT Data' ");
+	TwAddButton(bar, "ExecuteProcessing", ExecuteOCTProccessing, &engine.OCT, " label='Execute Processing' ");
+	TwAddButton(bar, "OutputBScans", ExecuteOCTProccessing, &engine.OCT, " label='Output BScans' ");
+	TwAddButton(bar, "OutputCResults", ExecuteOCTProccessing, &engine.OCT, " label='Output Correlation Results' ");
+	TwAddButton(bar, "OutputComposite", ExecuteOCTProccessing, &engine.OCT, " label='Output Vasculature' ");
+	TwAddButton(bar, "ComputeCorrelation", ComputeCorrelation, &engine, " label='Compute Correlation' ");
 
 	int speed;
 
 	parametersBar = TwNewBar("Parameters");
-	TwAddVarRW(parametersBar, "kernelSizeX", TW_TYPE_INT32, &oct.KernelSizeX, 
+	TwAddVarRW(parametersBar, "kernelSizeX", TW_TYPE_INT32, &engine.OCT.KernelSizeX,
 		" label='Kernel size X'");
-	TwAddVarRW(parametersBar, "kernelSizeY", TW_TYPE_INT32, &oct.KernelSizeY,
+	TwAddVarRW(parametersBar, "kernelSizeY", TW_TYPE_INT32, &engine.OCT.KernelSizeY,
 		" label='Kernel size Y'");
 
 

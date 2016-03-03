@@ -3,6 +3,7 @@
 #include "EngineRenderer.h"
 #include "UI.h"
 #include "EngineObject.h"
+#include "EngineOCT.h"
 
 
 class Engine
@@ -12,7 +13,7 @@ class Engine
 		EngineRenderer Renderer;
 		SDL_Event EngineEvent;
 		bool TerminateEngine;
-		UI EngineUI;
+		//UI EngineUI;
 		EngineOCT OCT;
 		EngineRenderer EngineRenderer;
 

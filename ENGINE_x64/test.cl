@@ -410,17 +410,19 @@ __kernel void corrKernel(__global unsigned char* bScanData,
 
 			for (row = 0; row < kernelY;row++){ 
 				for (col = 0; col < kernelX; col++){ 
-					//Image00
+
+					//Image00 Points
 					imagePonts00[col + (row*kernelX)] =
 						bScanData[((col + kernelID) * 3) + (bScanSize* bScanNum) + (1500*row)];
-
+					//Aggregate of point values from Image00
 					sum00 += imagePonts00[col + (row*kernelX)];
 
-					//Image01
+					//Image01 Points
 					imagePonts01[col + (row*kernelX)] =
 						bScanData[((col + kernelID) * 3) + (bScanSize* (bScanNum + 1)) + (1500*row)];
-				
+					//Aggregate of point values from Image00				
 					sum01 += imagePonts01[col + (row*kernelX)];
+
 				}
 			}
 
@@ -439,14 +441,11 @@ __kernel void corrKernel(__global unsigned char* bScanData,
 
 			coeff = numerator / (sqrt(denominator00) * sqrt(denominator01));
 
-			if (numerator == 0 || denominator00 == 0 || denominator01 == 0)
-			{
-				result = 0;
-			}
-			else {
+			if (numerator == 0 || denominator00 == 0 || denominator01 == 0)			
+				result = 0;			
+			else 
 				result = (1.0f - fabs(coeff)) * 255.0f;
-			}
-
+			
 			correlationResults[(imageOffset*bScanNum)+kernelID] = result;
 		}
 	}
@@ -462,7 +461,7 @@ __kernel void opacityKernel(__global float* compositeResults,
 	row = kernelID / 500;
 
 	for (bScanNum = 0; bScanNum < bScanCount - 1; bScanNum++) {
-		if (compositeResults[(kernelID * 4) + (512 * 500 * 4 * bScanNum)] < 60)
+		if (compositeResults[(kernelID * 4) + (512 * 500 * 4 * bScanNum)] < 30)
 			compositeResults[(kernelID * 4) + 3 + (512 * 500 * 4 * bScanNum)] = 0;
 		else
 			compositeResults[(kernelID * 4) + 3 + (512 * 500 * 4 * bScanNum)] = 
@@ -541,38 +540,36 @@ __kernel void compositeKernel(__global float* avgBScanData,
 }
 
 __kernel void filterKernel(__global float* avgBScanData,
+	const unsigned int windowX,
+	const unsigned int windowY,
 	const int bScanCount)
 {
-	int bScanNum;
+	int bScanNum, windowNumCol, windowNumRow;
 	int row, col;
 	float val = 0.0f;
 	int imgSize = 500 * 512;
 	int kernelID = get_global_id(0);
-	float window[9];
+	float window[20*20];
 
 	row = kernelID / 500;
 	col = kernelID - (row * 500);
 
 
-	if (col < (500 - (3 - 1)) &&
-		row < (512 - (3 - 1))) {
+	if (col < (500 - (windowX - 1)) &&
+		row < (512 - (windowY - 1))) {
 
 		for (bScanNum = 0; bScanNum < bScanCount - 1; bScanNum++) {
 
-			window[0] = avgBScanData[col + (row * 500) + (bScanNum*imgSize)];
-			window[1] = avgBScanData[col + (row * 500) + 1 + (bScanNum*imgSize)];
-			window[2] = avgBScanData[col + (row * 500) + 2 + (bScanNum*imgSize)];
-
-			window[3] = avgBScanData[col + (row * 500) + (500) + (bScanNum*imgSize)];
-			window[4] = avgBScanData[col + (row * 500) + (500) + 1 + (bScanNum*imgSize)];
-			window[5] = avgBScanData[col + (row * 500) + (500) + 2 + (bScanNum*imgSize)];
-
-			window[6] = avgBScanData[col + (row * 500) + (500 * 2) + (bScanNum*imgSize)];
-			window[7] = avgBScanData[col + (row * 500) + (500 * 2) + 1 + (bScanNum*imgSize)];
-			window[8] = avgBScanData[col + (row * 500) + (500 * 2) + 2 + (bScanNum*imgSize)];
+			for (windowNumRow = 0; windowNumRow < (windowY); windowNumRow++){
+				for (windowNumCol = 0; windowNumCol < (windowX); windowNumCol++){ 
+					window[windowNumCol + (windowNumRow * windowY)] = 
+						avgBScanData[col + (row * 500) + (500 * windowNumRow) + 
+						windowNumCol + (bScanNum*imgSize)];
+				}
+			}
 
 			int temp, i, j;
-			for (i = 0; i < 9; i++) {
+			for (i = 0; i < windowX * windowY; i++) {
 				temp = window[i];
 				for (j = i - 1; j >= 0 && temp < window[j]; j--) {
 					window[j + 1] = window[j];
@@ -580,8 +577,8 @@ __kernel void filterKernel(__global float* avgBScanData,
 				window[j + 1] = temp;
 			}
 
-			avgBScanData[kernelID + (500) + 1 + (bScanNum*imgSize)] =
-				window[4];
+			avgBScanData[kernelID + (500) + (windowX/2) + (bScanNum*imgSize)] =
+				window[windowX+(windowX/2)];
 		}
 	}
 }

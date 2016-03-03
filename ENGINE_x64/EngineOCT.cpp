@@ -993,7 +993,7 @@ int SetFilterParameters()
 	err = clSetKernelArg(filterKernel, 0, sizeof(cl_mem), &deviceAvgResults);
 	if (err != CL_SUCCESS) return err;
 	size_t totalBScans = _numBScans;
-	err = clSetKernelArg(filterKernel, 1, sizeof(cl_uint), &totalBScans);
+	err = clSetKernelArg(filterKernel, 3, sizeof(cl_uint), &totalBScans);
 	if (err != CL_SUCCESS) return err;
 
 	//Avg Kernel Parameters
@@ -1604,7 +1604,7 @@ int FilterPostProcess(int batchNum,int batchSize,std::vector<float> &correlation
 
 
 	//Perform median filtering
-	err = clSetKernelArg(filterKernel, 1, sizeof(cl_uint), &batchSize);
+	err = clSetKernelArg(filterKernel, 3, sizeof(cl_uint), &batchSize);
 
 	err = clEnqueueNDRangeKernel(_commandQueue, filterKernel, 1, NULL,
 		&totalWorkItems, &numWorkItemsPerGroup, 0, NULL, NULL);
@@ -1837,11 +1837,12 @@ int ComputeCorrelation(int batchNum, int batchSize,std::vector<float>& correlati
 {
 	bool saveBMP = true;
 	cl_int err;
-	size_t numWorkItemsPerGroup =256;
-	//    size_t numWorkGroups;
+	size_t numWorkItemsPerGroup = 1;
 	size_t totalWorkItems = 500 * 512;
 
-	err = clEnqueueNDRangeKernel(_commandQueue, corrKernel, 1, NULL, &totalWorkItems, &numWorkItemsPerGroup, 0, NULL, NULL);
+	err = clEnqueueNDRangeKernel(_commandQueue, corrKernel, 1, NULL, 
+		&totalWorkItems, &numWorkItemsPerGroup, 0, NULL, NULL);
+
 	if (err != CL_SUCCESS)
 		return err;
 
@@ -2535,7 +2536,7 @@ void EngineOCT::OpenCLCompute()
 	unsigned int outputImageHeight;
 
 	unsigned int totalBScans = 500;
-	unsigned int numBScansPerBatch = 100;
+	unsigned int numBScansPerBatch = 25;
 	unsigned int numBScanProcessingIteratations = (unsigned int)floor(totalBScans / numBScansPerBatch);
 	unsigned int numAScans = 500;
 	unsigned int ascanAve = 1;
@@ -2546,6 +2547,8 @@ void EngineOCT::OpenCLCompute()
 
 	this->KernelSizeX = 6;
 	this->KernelSizeY = 6;
+	this->FilterWindowX = 3;
+	this->FilterWindowY = 3;
 
 	unsigned int saveBmp = true;
 
@@ -2676,7 +2679,7 @@ void EngineOCT::OpenCLCompute()
 		printf("Processing %i B-Scans in batches of %i, each batch comprising %i A-Scans...\n",
 			totalBScans, numBScansPerBatch, totalAScans);
 
-		//numBScanProcessingIteratations = 3;
+		//numBScanProcessingIteratations = 4;
 
 		for (i = 0; i < numBScanProcessingIteratations; i++)
 		{
@@ -2845,6 +2848,8 @@ void EngineOCT::ComputeCrossCorrelation()
 		}
 
 		res = clSetKernelArg(corrKernel, 1, sizeof(cl_uint), &batchSizePlus);
+		res = clSetKernelArg(corrKernel, 2, sizeof(cl_uint), &KernelSizeX);
+		res = clSetKernelArg(corrKernel, 3, sizeof(cl_uint), &KernelSizeY);
 
 		res = clEnqueueWriteBuffer(_commandQueue,
 			bScanCorrData,
@@ -2858,7 +2863,8 @@ void EngineOCT::ComputeCrossCorrelation()
 
 		res = ComputeCorrelation(batchNum, batchSizePlus, this->CorrelationResults);
 
-		//
+		res = clSetKernelArg(filterKernel, 1, sizeof(cl_uint), &FilterWindowX);
+		res = clSetKernelArg(filterKernel, 2, sizeof(cl_uint), &FilterWindowY);
 
 		res = FilterPostProcess(batchNum, batchSizePlus, this->CorrelationResults,
 			this->CompositeResults);
@@ -2866,5 +2872,8 @@ void EngineOCT::ComputeCrossCorrelation()
 		delete(tempBScanData);
 	}
 }
+
+
+
 
 
