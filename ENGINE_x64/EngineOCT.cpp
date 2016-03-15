@@ -2742,7 +2742,7 @@ void EngineOCT::OpenCLCompute()
 				//	//printf("%f\n", logEnv[j]);
 				//}
 
-				if (!saveBmp) {
+				if (saveBmp) {
 					for (j = 0; j < numBScansPerBatch; j++)
 					{
 
@@ -2751,7 +2751,6 @@ void EngineOCT::OpenCLCompute()
 						//SaveBitmapFromFloatArray(bmpPath,&logEnv[j*numAScansPerBScan*outputLen], (unsigned short)numAScansPerBScan, outputLen, outputLen/2, bmpMinVal, bmpMaxVal);
 
 						SaveBitmap(bmpPath, &bscanBmp[j*totalBScanSize], numAScansPerBScan, outputImageHeight, totalBScanSize);
-						sprintf(bmpPath, "%scorrelationMap%0.4i.bmp\0", rootPath, i*numBScansPerBatch + j);
 					}
 
 				}
@@ -2799,7 +2798,7 @@ void EngineOCT::ComputeCrossCorrelation()
 {
 	int res;
 	this->CompositeResults.clear();
-	this->CompositeResults.clear();
+	this->CorrelationResults.clear();
 
 	for (int batchNum = 0; batchNum < numBScanProcessingIteratations; batchNum++) {
 

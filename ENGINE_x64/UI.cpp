@@ -55,7 +55,9 @@ void UI::InitialiseUI(int screenWidth,int screenHeight, Engine &engine)
 		" label='Kernel size X'");
 	TwAddVarRW(parametersBar, "kernelSizeY", TW_TYPE_INT32, &engine.OCT.KernelSizeY,
 		" label='Kernel size Y'");
-
-
+	TwAddVarRW(parametersBar, "FilterWindowX", TW_TYPE_INT32, &engine.OCT.FilterWindowX,
+		" label='Filter Window X'");
+	TwAddVarRW(parametersBar, "FilterWindowY", TW_TYPE_INT32, &engine.OCT.FilterWindowY,
+		" label='Filter Window Y'");
 }
 
