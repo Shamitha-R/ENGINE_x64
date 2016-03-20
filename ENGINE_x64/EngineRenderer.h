@@ -25,7 +25,6 @@ public:
 	bool EnableRendering = true;
 	double ObjectOrientation[16];
 
-
 	EngineRenderer();
 	~EngineRenderer();
 
@@ -33,7 +32,7 @@ public:
 	void HandleInput(unsigned char targetKey, int xPos, int yPos);
 	void Update();
 	void Render();
-	void InitializeRenderData(std::vector<GLchar> &renderData);
+	void InitializeRenderData(std::vector<GLchar> &renderData,int lCount);
 
 private:
 	bool InitializeOpenGL();

@@ -287,7 +287,7 @@ GLfloat dOrthoSize = 1.0f;
 			glTexCoord3f(0.0f, 1.0f, ((float)TexIndex+1.0f)/2.0f);  \
 			glVertex3f(-dOrthoSize,dOrthoSize,TexIndex);
 glm::vec2 rotRef;
-void Render(SDL_Window* EngineWindow,double mdRotation[16])
+void Render(SDL_Window* EngineWindow,double mdRotation[16],int lCount)
 {
 	SDL_GetMouseState(&x, &y);
 	if (SDL_PollEvent(&(EngineEvent2)) != 0)
@@ -347,7 +347,7 @@ void Render(SDL_Window* EngineWindow,double mdRotation[16])
 	// texture mapping or by negative scaling of y axis
 	glScaled(((float)500 / (float)500)*2.0f,
 		(-1.0f*(float)500 / (float)(float)512)*2.0f,
-			((float)500 / (float)400)*2.0f);
+			((float)500 / (float)lCount)*2.0f);
 
 	glMultMatrixd(mdRotation);
 
@@ -387,7 +387,8 @@ int main(int argc, char *argv[])
 	while (!engine.TerminateEngine)
 	{
 		//engine.UpdateEngine(0);
-		Render(engine.EngineRenderer.EngineWindow, engine.EngineRenderer.ObjectOrientation);
+		Render(engine.EngineRenderer.EngineWindow, 
+			engine.EngineRenderer.ObjectOrientation,engine.RenderLayerCount);
 	}
 
 	return 0;
@@ -396,8 +397,8 @@ int main(int argc, char *argv[])
 void Engine::PassRenderData()
 {
 	std::vector<GLchar> testData(OCT.CompositeResults.begin(),
-		OCT.CompositeResults.begin() + ((500 * 512 * 4)) * 400);
+		OCT.CompositeResults.begin() + ((500 * 512 * 4)) * RenderLayerCount);
 
-	EngineRenderer.InitializeRenderData(testData);
+	EngineRenderer.InitializeRenderData(testData,RenderLayerCount);
 }
 

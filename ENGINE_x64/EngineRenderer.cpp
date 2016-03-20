@@ -146,7 +146,7 @@ void EngineRenderer::Render()
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 
-void EngineRenderer::InitializeRenderData(std::vector<GLchar> &renderData)
+void EngineRenderer::InitializeRenderData(std::vector<GLchar> &renderData,int lCount)
 {
 	int texID = 0;
 	glGenTextures(1, (GLuint*)&texID);
@@ -161,7 +161,7 @@ void EngineRenderer::InitializeRenderData(std::vector<GLchar> &renderData)
 	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
-	glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA, 500, 512, 400, 0,
+	glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA, 500, 512, lCount, 0,
 		GL_RGBA, GL_UNSIGNED_BYTE, renderData.data());
 	glBindTexture(GL_TEXTURE_3D, 0);
 

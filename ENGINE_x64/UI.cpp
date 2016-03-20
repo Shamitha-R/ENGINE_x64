@@ -32,6 +32,7 @@ void UI::InitialiseUI(int screenWidth,int screenHeight, Engine &engine)
 {
 	TwBar *bar;
 	TwBar *parametersBar;
+	TwBar *computeParameters;
 
 	TwInit(TW_OPENGL,NULL);
 
@@ -48,9 +49,8 @@ void UI::InitialiseUI(int screenWidth,int screenHeight, Engine &engine)
 	TwAddButton(bar, "OutputComposite", ExecuteOCTProccessing, &engine.OCT, " label='Output Vasculature' ");
 	TwAddButton(bar, "ComputeCorrelation", ComputeCorrelation, &engine, " label='Compute Correlation' ");
 
-	int speed;
 
-	parametersBar = TwNewBar("Parameters");
+	parametersBar = TwNewBar("Render Parameters");
 	TwAddVarRW(parametersBar, "kernelSizeX", TW_TYPE_INT32, &engine.OCT.KernelSizeX,
 		" label='Kernel size X'");
 	TwAddVarRW(parametersBar, "kernelSizeY", TW_TYPE_INT32, &engine.OCT.KernelSizeY,
@@ -59,5 +59,13 @@ void UI::InitialiseUI(int screenWidth,int screenHeight, Engine &engine)
 		" label='Filter Window X'");
 	TwAddVarRW(parametersBar, "FilterWindowY", TW_TYPE_INT32, &engine.OCT.FilterWindowY,
 		" label='Filter Window Y'");
+
+	computeParameters = TwNewBar("Compute Parameters");
+	TwAddVarRW(computeParameters, "AScanCount", TW_TYPE_INT32, &engine.OCT.NumAScans,
+		" label='A-Scan Count'");
+	TwAddVarRW(computeParameters, "MaxValue", TW_TYPE_FLOAT, &engine.OCT.MaxValue,
+		" label='Max Value'");
+	TwAddVarRW(computeParameters, "MinValue", TW_TYPE_FLOAT, &engine.OCT.MinValue,
+		" label='Min Value'");
 }
 

@@ -382,11 +382,9 @@ char*               _compilerOptions;
 
 cl_uint _inputSpectrumLength;
 cl_uint _outputAScanLength;
-cl_uint _outputImageHeight;
+
 cl_uint _numBScans;
-cl_uint _numAScansPerBScan;
-cl_uint _ascanAveragingFactor;
-cl_uint _bscanAveragingFactor;
+
 cl_uint _windowType;
 cl_uint _imageFormatStride;
 cl_uint _corrSizeX;
@@ -580,14 +578,11 @@ int clInit(
 	return 0;
 }
 
-int clAlloc(
+int EngineOCT::clAlloc(
 	cl_context context,
 	cl_uint inputSpectraLength,		// Specify the actual length of input spectra
 	cl_uint outputAScanLength,		// Specify the length of output (outputLength >= inputLength).  If inputlength < outputlength then the input spectra will be zero padded
 	cl_uint numBScans,               // Number of B-Scans processed in one go
-	cl_uint numAScansPerBScan,
-	cl_uint ascanAveragingFactor,
-	cl_uint bscanAveragingFactor,
 	float* hostResamplingTable,		// Resampling table
 	float* hostInterpolationMatrix,		// Pre-computed interpolation matrix
 	float* hostReferenceSpectrum,	// Reference spectrum to be subtracted (or maybe divided!!) from each spectrum
@@ -608,25 +603,23 @@ int clAlloc(
 	//
 	_inputSpectrumLength = inputSpectraLength;
 	_outputAScanLength = outputAScanLength;
-	_outputImageHeight = _outputAScanLength / 2;
+	//_outputImageHeight = _outputAScanLength / 2;
 	_numBScans = numBScans;
-	_numAScansPerBScan = numAScansPerBScan;
-	_ascanAveragingFactor = ascanAveragingFactor;
-	_bscanAveragingFactor = bscanAveragingFactor;
+	//NumAScansPerBScan = numAScansPerBScan;
 	_imageFormatStride = imageFormatStride;
 	//
 	// Derived quantities used for allocating memory on the GPU
 	//
-	_totalAScansPerBScan = (size_t)numAScansPerBScan * (size_t)ascanAveragingFactor;
-	_totalBScans = (size_t)_numBScans * (size_t)_bscanAveragingFactor;
+	_totalAScansPerBScan = (size_t)NumAScansPerBScan * (size_t)AScanAverage;
+	_totalBScans = (size_t)_numBScans * (size_t)BScanAverage;
 	_totalAScans = _totalBScans * _totalAScansPerBScan;
 	_totalInputSpectraLength = _totalAScans * (size_t)_inputSpectrumLength;
 	_totalOutputAScanLength = _totalAScans * (size_t)_outputAScanLength;
 	_totalPreProcessedSpectraLength = _totalOutputAScanLength * (size_t)2;
-	_bitmapBScanSize = (size_t)_outputImageHeight * (size_t)_imageFormatStride;
-	_bitmapBScanVolumeSize = (size_t)_numBScans * (size_t)_bscanAveragingFactor * _bitmapBScanSize;
+	_bitmapBScanSize = (size_t)OutputImageHeight * (size_t)_imageFormatStride;
+	_bitmapBScanVolumeSize = (size_t)_numBScans * (size_t)BScanAverage * _bitmapBScanSize;
 
-	size_t corrSize = (size_t)(_numBScans + 1) * (size_t)_bscanAveragingFactor * _bitmapBScanSize;
+	size_t corrSize = (size_t)(_numBScans + 1) * (size_t)BScanAverage * _bitmapBScanSize;
 
 	//
 	_correlationUsesLogBScans = TRUE;       // default is for correlation mapping to use logarithmic bscans
@@ -702,22 +695,24 @@ int clAlloc(
 		return err;
 
 	//filterResults
-	deviceFilterResults = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(float)*(512 * 500 * (numBScans + 1)),
+	deviceFilterResults = clCreateBuffer(context, CL_MEM_READ_WRITE, 
+		sizeof(float)*(OutputImageHeight * NumAScansPerBScan * (numBScans + 1)),
 		NULL, &err);	// Correlation map
 	if (err != CL_SUCCESS)
 		return err;
 
-	//filterResults
+	//AVG Resutls
 	deviceAvgResults = clCreateBuffer(context, CL_MEM_READ_WRITE,
-		sizeof(float)*(512 * 500*(numBScans+1)),NULL, &err);	
+		sizeof(float)*(OutputImageHeight * NumAScansPerBScan * (numBScans+1)),NULL, &err);	
 	if (err != CL_SUCCESS)
 		return err;
 
 	//Composite Results 
 	deviceCompositeResults = clCreateBuffer(context, CL_MEM_READ_WRITE,
-		sizeof(float)*(512 * 500 * 4 * (numBScans + 1)), NULL, &err);	
+		sizeof(float)*(OutputImageHeight * NumAScansPerBScan * 4 * (numBScans + 1)), NULL, &err);	
 	if (err != CL_SUCCESS)
 		return err;
+
 	deviceBscanNoiseList = clCreateBuffer(context, CL_MEM_READ_WRITE,
 		sizeof(float)*((numBScans + 1)), NULL, &err);	
 	if (err != CL_SUCCESS)
@@ -864,7 +859,7 @@ int clBuild(char* sourceFile, char* buildLog, size_t* buildLogLength)
 	return err;
 }
 
-int SetPreProcessingKernelParameters()
+int EngineOCT::SetPreProcessingKernelParameters()
 {
 	/*
 	__kernel void octPreProcessingKernel(
@@ -897,11 +892,11 @@ int SetPreProcessingKernelParameters()
 	if (err != CL_SUCCESS) return err;
 	err = clSetKernelArg(_preProcessingKernel, 6, sizeof(cl_uint), &_numBScans);
 	if (err != CL_SUCCESS) return err;
-	err = clSetKernelArg(_preProcessingKernel, 7, sizeof(cl_uint), &_numAScansPerBScan);
+	err = clSetKernelArg(_preProcessingKernel, 7, sizeof(cl_uint), &this->NumAScansPerBScan);
 	if (err != CL_SUCCESS) return err;
-	err = clSetKernelArg(_preProcessingKernel, 8, sizeof(cl_uint), &_ascanAveragingFactor);
+	err = clSetKernelArg(_preProcessingKernel, 8, sizeof(cl_uint), &AScanAverage);
 	if (err != CL_SUCCESS) return err;
-	err = clSetKernelArg(_preProcessingKernel, 9, sizeof(cl_uint), &_bscanAveragingFactor);
+	err = clSetKernelArg(_preProcessingKernel, 9, sizeof(cl_uint), &BScanAverage);
 	if (err != CL_SUCCESS) return err;
 	err = clSetKernelArg(_preProcessingKernel, 10, sizeof(cl_uint), &_windowType);
 	if (err != CL_SUCCESS) return err;
@@ -911,10 +906,8 @@ int SetPreProcessingKernelParameters()
 	//if (err != CL_SUCCESS) return err;
 
 	return err;
-
-
 }
-int SetPostProcessingKernelParameters()
+int EngineOCT::SetPostProcessingKernelParameters()
 {
 	/*
 	__kernel void octPostProcessingKernel(
@@ -944,11 +937,11 @@ int SetPostProcessingKernelParameters()
 	if (err != CL_SUCCESS) return err;
 	err = clSetKernelArg(_postProcessingKernel, 3, sizeof(cl_uint), &_numBScans);
 	if (err != CL_SUCCESS) return err;
-	err = clSetKernelArg(_postProcessingKernel, 4, sizeof(cl_uint), &_numAScansPerBScan);
+	err = clSetKernelArg(_postProcessingKernel, 4, sizeof(cl_uint), &this->NumAScansPerBScan);
 	if (err != CL_SUCCESS) return err;
-	err = clSetKernelArg(_postProcessingKernel, 5, sizeof(cl_uint), &_ascanAveragingFactor);
+	err = clSetKernelArg(_postProcessingKernel, 5, sizeof(cl_uint), &AScanAverage);
 	if (err != CL_SUCCESS) return err;
-	err = clSetKernelArg(_postProcessingKernel, 6, sizeof(cl_uint), &_bscanAveragingFactor);
+	err = clSetKernelArg(_postProcessingKernel, 6, sizeof(cl_uint), &BScanAverage);
 	if (err != CL_SUCCESS) return err;
 	err = clSetKernelArg(_postProcessingKernel, 7, sizeof(cl_uint), &_imageFormatStride);	// Envelope of BScan
 	if (err != CL_SUCCESS) return err;
@@ -967,7 +960,7 @@ int SetPostProcessingKernelParameters()
 
 	return err;
 }
-int SetCorrelationParameters(cl_uint kernelSizeX,cl_uint kernelsizeY)
+int EngineOCT::SetCorrelationParameters(cl_uint kernelSizeX,cl_uint kernelsizeY)
 {
 	cl_int err = 0;
 	err = clSetKernelArg(corrKernel, 0, sizeof(cl_mem), &bScanCorrData);
@@ -981,12 +974,17 @@ int SetCorrelationParameters(cl_uint kernelSizeX,cl_uint kernelsizeY)
 	err = clSetKernelArg(corrKernel, 3, sizeof(cl_uint), &kernelsizeY);
 	if (err != CL_SUCCESS) return err;
 
-	err = clSetKernelArg(corrKernel, 4, sizeof(cl_mem), &deviceCorrelationMap);
+	err = clSetKernelArg(corrKernel, 4, sizeof(cl_uint), &this->NumAScansPerBScan);
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(corrKernel, 5, sizeof(cl_uint), &this->OutputImageHeight);
+	if (err != CL_SUCCESS) return err;
+
+	err = clSetKernelArg(corrKernel, 6, sizeof(cl_mem), &deviceCorrelationMap);
 	if (err != CL_SUCCESS) return err;
 
 	return err;
 }
-int SetFilterParameters()
+int EngineOCT::SetFilterParameters()
 {
 	//Filter Kernel
 	cl_int err = 0;
@@ -995,13 +993,21 @@ int SetFilterParameters()
 	size_t totalBScans = _numBScans;
 	err = clSetKernelArg(filterKernel, 3, sizeof(cl_uint), &totalBScans);
 	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(filterKernel, 4, sizeof(cl_uint), &NumAScansPerBScan);
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(filterKernel, 5, sizeof(cl_uint), &OutputImageHeight);
+	if (err != CL_SUCCESS) return err;
 
 	//Avg Kernel Parameters
 	err = clSetKernelArg(avgKernel, 0, sizeof(cl_mem), &bScanCorrData);
 	if (err != CL_SUCCESS) return err;
 	err = clSetKernelArg(avgKernel, 1, sizeof(cl_uint), &totalBScans);
 	if (err != CL_SUCCESS) return err;
-	err = clSetKernelArg(avgKernel, 2, sizeof(cl_mem), &deviceAvgResults);
+	err = clSetKernelArg(avgKernel, 2, sizeof(cl_uint), &NumAScansPerBScan);
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(avgKernel, 3, sizeof(cl_uint), &OutputImageHeight);
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(avgKernel, 4, sizeof(cl_mem), &deviceAvgResults);
 	if (err != CL_SUCCESS) return err;
 
 	//Composite Kernel Parameters
@@ -1017,11 +1023,19 @@ int SetFilterParameters()
 	if (err != CL_SUCCESS) return err;
 	err = clSetKernelArg(compositeKernel, 5, sizeof(cl_mem), &deviceCompositeResults);
 	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(compositeKernel, 6, sizeof(cl_uint), &NumAScansPerBScan);
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(compositeKernel, 7, sizeof(cl_uint), &OutputImageHeight);
+	if (err != CL_SUCCESS) return err;
 
 	//Opacity Kernel
 	err = clSetKernelArg(opacityKernel, 0, sizeof(cl_mem), &deviceCompositeResults);
 	if (err != CL_SUCCESS) return err;
 	err = clSetKernelArg(opacityKernel, 1, sizeof(cl_uint), &totalBScans);
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(opacityKernel, 2, sizeof(cl_uint), &NumAScansPerBScan);
+	if (err != CL_SUCCESS) return err;
+	err = clSetKernelArg(opacityKernel, 3, sizeof(cl_uint), &OutputImageHeight);
 	if (err != CL_SUCCESS) return err;
 
 	return err;
@@ -1107,13 +1121,10 @@ void PreComputeInterpolationCoefficients(float* resamplingTable, float* coefs,
 	}
 }
 
-int clOCTInit(cl_uint clDeviceIndex,			// Index in the device list of the OpenCL capable device to use
+int EngineOCT::clOCTInit(cl_uint clDeviceIndex,			// Index in the device list of the OpenCL capable device to use
 	cl_uint inputSpectraLength,
 	cl_uint outputAScanLength,
 	cl_uint numBScans,
-	cl_uint numAScansPerBScan,
-	cl_uint ascanAveragingFactor,
-	cl_uint bscanAveragingFactor,
 	float* hostResamplingTable,		// Resampling table
 	float* hostReferenceSpectrum,	// Reference spectrum to be subtracted (or maybe divided!!) from each spectrum
 	float* hostReferenceAScan,		// A reference background A-Scan to be subtracted.. maybe log domain!!
@@ -1185,9 +1196,6 @@ int clOCTInit(cl_uint clDeviceIndex,			// Index in the device list of the OpenCL
 		inputSpectraLength,		// Specify the actual length of input spectra
 		outputAScanLength,		// Specify the length of output (outputLength >= inputLength).  If inputlength < outputlength then the input spectra will be zero padded
 		numBScans,
-		numAScansPerBScan,
-		ascanAveragingFactor,
-		bscanAveragingFactor,
 		hostResamplingTable,		// Resampling table
 		_interpolationMatrix,
 		hostReferenceSpectrum,	// Reference spectrum to be subtracted (or maybe divided!!) from each spectrum
@@ -1578,7 +1586,7 @@ float standard_deviation(std::vector<float> &data)
 	return sqrt(sum_deviation / n);
 }
 
-int FilterPostProcess(int batchNum,int batchSize,std::vector<float> &correlationResults,
+int EngineOCT::FilterPostProcess(int batchNum,int batchSize,std::vector<float> &correlationResults,
 	std::vector<float> &compositeResults)
 {
 	printf("Performing Post processing on results \n");
@@ -1587,7 +1595,7 @@ int FilterPostProcess(int batchNum,int batchSize,std::vector<float> &correlation
 	cl_int err;
 	size_t numWorkItemsPerGroup = 1;
 	//    size_t numWorkGroups;
-	size_t totalWorkItems = 500 * 512;
+	size_t totalWorkItems = NumAScansPerBScan * OutputImageHeight;
 
 	err = clSetKernelArg(avgKernel, 1, sizeof(cl_uint), &batchSize);
 
@@ -1596,10 +1604,11 @@ int FilterPostProcess(int batchNum,int batchSize,std::vector<float> &correlation
 	if (err != CL_SUCCESS)
 		return err;
 
-	std::vector<float> avgResults(500*512*(batchSize-1));
+	std::vector<float> avgResults(NumAScansPerBScan*OutputImageHeight*(batchSize-1));
 
 	err = clEnqueueReadBuffer(_commandQueue, deviceAvgResults, CL_TRUE, 0, 
-		sizeof(float)*(500 * 512 * (batchSize - 1)), avgResults.data(), 0, NULL, NULL);
+		sizeof(float)*(NumAScansPerBScan * OutputImageHeight * (batchSize - 1)), 
+		avgResults.data(), 0, NULL, NULL);
 	if (err != CL_SUCCESS) return err;
 
 
@@ -1611,17 +1620,16 @@ int FilterPostProcess(int batchNum,int batchSize,std::vector<float> &correlation
 	if (err != CL_SUCCESS)
 		return err;
 
-	std::vector<float> filterResults(500 * 512 * (batchSize - 1));
+	std::vector<float> filterResults(NumAScansPerBScan * OutputImageHeight * (batchSize - 1));
 
 	err = clEnqueueReadBuffer(_commandQueue, deviceAvgResults, CL_TRUE, 0,
-		sizeof(float)*(500 * 512 * (batchSize - 1)), filterResults.data(), 0, NULL, NULL);
+		sizeof(float)*(NumAScansPerBScan * OutputImageHeight * (batchSize - 1)), filterResults.data(), 0, NULL, NULL);
 	if (err != CL_SUCCESS) 
 		return err;
 
-
-	int topIgnoreSize = 15 * 500;
-	int dataIgnoreSize = 199 * 500;
-	int topIgnoreCorr = 14 * 500;
+	int topIgnoreSize = 15 * NumAScansPerBScan;
+	int dataIgnoreSize = 199 * NumAScansPerBScan;
+	int topIgnoreCorr = 14 * NumAScansPerBScan;
 
 	std::vector<float> BScanNoiseList;
 	std::vector<float> CorrNoiseList;
@@ -1629,16 +1637,18 @@ int FilterPostProcess(int batchNum,int batchSize,std::vector<float> &correlation
 	for (int bScanNum = 0; bScanNum < batchSize - 1; bScanNum++)
 	{
 		//Threshold BScancs
-		std::vector<float> avgBScan(filterResults.begin() + (500*512*bScanNum)
-			, filterResults.begin() + (500*512*(bScanNum+1)));
+		std::vector<float> avgBScan(filterResults.begin() + 
+			(NumAScansPerBScan*OutputImageHeight*bScanNum)
+			, filterResults.begin() + (NumAScansPerBScan*OutputImageHeight*(bScanNum+1)));
 
 		std::vector<float> noiseDataBScan;
 
 		for (int i = 0; i < batchSize; i++)
 		{
 			noiseDataBScan.insert(noiseDataBScan.end(),
-				&avgBScan[((i * 500) + topIgnoreSize + dataIgnoreSize)],
-				&avgBScan[((i * 500) + topIgnoreSize + dataIgnoreSize) + (500)]);
+				&avgBScan[((i * NumAScansPerBScan) + topIgnoreSize + dataIgnoreSize)],
+				&avgBScan[((i * NumAScansPerBScan) + topIgnoreSize + dataIgnoreSize) 
+				+ (NumAScansPerBScan)]);
 		}
 
 		double sumBScan = std::accumulate(noiseDataBScan.begin(), noiseDataBScan.end(), 0.0);
@@ -1666,14 +1676,16 @@ int FilterPostProcess(int batchNum,int batchSize,std::vector<float> &correlation
 
 		//Threshold correlation Map
 		std::vector<float> noiseDataCorr;
-		std::vector<float> corrResult(correlationResults.begin() + (500 * 512 * bScanNum)
-			, correlationResults.begin() + (500 * 512 * (bScanNum + 1)));
+		std::vector<float> corrResult(correlationResults.begin() + 
+			(NumAScansPerBScan * OutputImageHeight * bScanNum)
+			, correlationResults.begin() + 
+			(NumAScansPerBScan * OutputImageHeight * (bScanNum + 1)));
 
 		for (int i = 0; i < 10; i++)
 		{
 			noiseDataCorr.insert(noiseDataCorr.end(),
-				&corrResult[(i * 500) + topIgnoreCorr],
-				&corrResult[((i * 500) + topIgnoreCorr) + (500)]);
+				&corrResult[(i * NumAScansPerBScan) + topIgnoreCorr],
+				&corrResult[((i * NumAScansPerBScan) + topIgnoreCorr) + (NumAScansPerBScan)]);
 		}
 
 
@@ -1801,7 +1813,8 @@ int FilterPostProcess(int batchNum,int batchSize,std::vector<float> &correlation
 	if (err != CL_SUCCESS)
 		return err;
 
-	std::vector<float> compositeOutput(500 * 512 * 4 * (batchSize - 1));
+	std::vector<float> compositeOutput(NumAScansPerBScan * OutputImageHeight * 4 
+		* (batchSize - 1));
 
 	//err = clEnqueueReadBuffer(_commandQueue, deviceCompositeResults, CL_TRUE, 0,
 		//sizeof(float)*(500 * 512 * 4 * (batchSize - 1)), compositeOutput.data(), 0, NULL, NULL);
@@ -1816,12 +1829,34 @@ int FilterPostProcess(int batchNum,int batchSize,std::vector<float> &correlation
 		return err;
 
 	err = clEnqueueReadBuffer(_commandQueue, deviceCompositeResults, CL_TRUE, 0,
-	sizeof(float)*(500 * 512 * 4 * (batchSize - 1)), compositeOutput.data(), 0, NULL, NULL);
+	sizeof(float)*(NumAScansPerBScan * OutputImageHeight * 4 * (batchSize - 1)), 
+		compositeOutput.data(), 0, NULL, NULL);
 	if (err != CL_SUCCESS) return err;
 
 	compositeResults.insert(compositeResults.end(),
 		compositeOutput.begin(),
 		compositeOutput.end());
+
+	//for (int bScanNum = 0; bScanNum < batchSize - 1; bScanNum++)
+	//{
+	//	int ignoreSize = 14 * NumAScansPerBScan * 4;
+	//	std::vector<unsigned char> testVec;
+	//	for (int i = 0; i < (NumAScansPerBScan * OutputImageHeight * 4); i += 4)
+	//	{
+	//		if (i >= ignoreSize &&
+	//			i < ((400 * NumAScansPerBScan * 4) + ignoreSize)) {
+	//			testVec.push_back(compositeOutput[i + (bScanNum * totalWorkItems * 4)]);
+	//			testVec.push_back(compositeOutput[i + (bScanNum * totalWorkItems * 4)] + 1);
+	//			testVec.push_back(compositeOutput[i + (bScanNum * totalWorkItems * 4)] + 2);
+	//		}
+	//	}
+
+	//	std::string str = "./results/composite" +
+	//		std::to_string(bScanNum + (batchNum * 1000) + 2)
+	//		+ ".bmp";
+	//	const char* fileName = str.c_str();
+	//	SaveBitmapVec(testVec.data(), NumAScansPerBScan, (400), NumAScansPerBScan * (400) * 3, fileName);
+	//}
 
 	//for (int bScanNum = 0; bScanNum < batchSize - 1; bScanNum++)
 	//{
@@ -1833,12 +1868,12 @@ int FilterPostProcess(int batchNum,int batchSize,std::vector<float> &correlation
 	return 0;
 }
 
-int ComputeCorrelation(int batchNum, int batchSize,std::vector<float>& correlationResults)
+int EngineOCT::ComputeCorrelation(int batchNum, int batchSize,std::vector<float>& correlationResults)
 {
 	bool saveBMP = true;
 	cl_int err;
 	size_t numWorkItemsPerGroup = 1;
-	size_t totalWorkItems = 500 * 512;
+	size_t totalWorkItems = NumAScansPerBScan * OutputImageHeight;
 
 	err = clEnqueueNDRangeKernel(_commandQueue, corrKernel, 1, NULL, 
 		&totalWorkItems, &numWorkItemsPerGroup, 0, NULL, NULL);
@@ -1849,7 +1884,8 @@ int ComputeCorrelation(int batchNum, int batchSize,std::vector<float>& correlati
 	float* correlationMap;
 	correlationMap = (float*)malloc(sizeof(float) * _totalAScans * _outputAScanLength);
 
-	err = clEnqueueReadBuffer(_commandQueue, deviceCorrelationMap, CL_TRUE, 0, sizeof(float)*_totalAScans * _outputAScanLength, correlationMap, 0, NULL, NULL);
+	err = clEnqueueReadBuffer(_commandQueue, deviceCorrelationMap, CL_TRUE, 0, 
+		sizeof(float)*_totalAScans * _outputAScanLength, correlationMap, 0, NULL, NULL);
 	if (err != CL_SUCCESS) return err;
 
 	std::vector<float> results(correlationMap, correlationMap + (totalWorkItems*batchSize));
@@ -1862,24 +1898,24 @@ int ComputeCorrelation(int batchNum, int batchSize,std::vector<float>& correlati
 		{
 
 			std::vector<std::vector<float>> corrCoeff;
-			for (int row = 0; row < 512; row++)
+			for (int row = 0; row < OutputImageHeight; row++)
 			{
 				std::vector<float> rowData00;
 
-				for (int col = 0; col < 500; col += 1)
+				for (int col = 0; col < NumAScansPerBScan; col += 1)
 				{
-					rowData00.push_back(results[col + (500 * row) +
+					rowData00.push_back(results[col + (NumAScansPerBScan * row) +
 						(bitMapNum * totalWorkItems)]);
 				}
 				corrCoeff.push_back(rowData00);
 			}
 
-			int ignoreSize = 14 * 500;
+			int ignoreSize = 14 * NumAScansPerBScan;
 			std::vector<unsigned char> testVec;
-			for (int i = 0; i < (500 * 512);i++)
+			for (int i = 0; i < (NumAScansPerBScan * OutputImageHeight);i++)
 			{
 				if (i >= ignoreSize &&
-					i < ((200*500)+ignoreSize)) {
+					i < ((200*NumAScansPerBScan)+ignoreSize)) {
 					testVec.push_back(results[i + (bitMapNum * totalWorkItems)]);
 					testVec.push_back(results[i + (bitMapNum * totalWorkItems)]);
 					testVec.push_back(results[i + (bitMapNum * totalWorkItems)]);
@@ -1890,12 +1926,12 @@ int ComputeCorrelation(int batchNum, int batchSize,std::vector<float>& correlati
 				std::to_string(bitMapNum + (batchNum * 1000) + 2)
 				+ ".bmp";
 			const char* fileName = str.c_str();
-			SaveBitmapVec(testVec.data(), 500, (200), 500 * (200) * 3,fileName);
+			SaveBitmapVec(testVec.data(), NumAScansPerBScan, (200), NumAScansPerBScan * (200) * 3,fileName);
 
 			if (!saveBMP) {
 
-				int w = 499;
-				int h = 511;
+				int w = NumAScansPerBScan - 1;
+				int h = OutputImageHeight -1;
 
 				FILE *f = nullptr;
 				if (f)
@@ -2533,29 +2569,30 @@ void EngineOCT::OpenCLCompute()
 
 	unsigned int inputLen;
 	unsigned int outputLen;
-	unsigned int outputImageHeight;
 
 	unsigned int totalBScans = 500;
 	unsigned int numBScansPerBatch = 25;
 	unsigned int numBScanProcessingIteratations = (unsigned int)floor(totalBScans / numBScansPerBatch);
-	unsigned int numAScans = 500;
-	unsigned int ascanAve = 1;
-	unsigned int bscanAve = 1;
+	
+	MinValue = -155;
+	MaxValue = -55;
 
-	float bmpMinVal = -155;
-	float bmpMaxVal = -55;
+	this->AScanAverage = 1;
+	this->BScanAverage = 1;
+
+	this->NumAScans = 500;
 
 	this->KernelSizeX = 6;
 	this->KernelSizeY = 6;
-	this->FilterWindowX = 3;
-	this->FilterWindowY = 3;
+	this->FilterWindowX = 5;
+	this->FilterWindowY = 5;
 
 	unsigned int saveBmp = true;
 
 	size_t loglen = 1000000;
 	size_t totalBScanSize;
 	size_t totalBScanVolumeSize;
-	cl_uint numAScansPerBScan;
+	//cl_uint numAScansPerBScan;
 	cl_uint totalAScans;
 	cl_uint totalInputLen;
 	cl_uint totalOutputLen;
@@ -2610,14 +2647,15 @@ void EngineOCT::OpenCLCompute()
 	inputLen = ReferenceAScanData.size();
 	outputLen = ReferenceAScanData.size();
 
-	outputImageHeight = outputLen / 2;
+	this->OutputImageHeight = outputLen / 2;
 
-	numAScansPerBScan = numAScans * ascanAve * bscanAve;
-	totalAScans = numBScansPerBatch * numAScansPerBScan;
+	NumAScansPerBScan = NumAScans * AScanAverage * BScanAverage;
+	totalAScans = numBScansPerBatch * this->NumAScansPerBScan;
+
 	totalInputLen = inputLen * totalAScans;
 	totalOutputLen = outputLen * totalAScans;
-	stride = 1500;
-	totalBScanSize = (size_t)stride * (size_t)outputImageHeight;
+	stride = this->NumAScansPerBScan * 3;
+	totalBScanSize = (size_t)stride * (size_t)OutputImageHeight;
 	totalBScanVolumeSize = totalBScanSize * (size_t)totalBScans;
 	resampTable = (float*)malloc(sizeof(float) * inputLen);
 	refSpec = (float*)malloc(sizeof(float) * inputLen);
@@ -2651,9 +2689,6 @@ void EngineOCT::OpenCLCompute()
 		inputLen,
 		outputLen,
 		numBScansPerBatch,
-		numAScans,
-		ascanAve,
-		bscanAve,
 		resampTable,
 		refSpec,
 		refAScan,
@@ -2679,7 +2714,7 @@ void EngineOCT::OpenCLCompute()
 		printf("Processing %i B-Scans in batches of %i, each batch comprising %i A-Scans...\n",
 			totalBScans, numBScansPerBatch, totalAScans);
 
-		//numBScanProcessingIteratations = 4;
+		numBScanProcessingIteratations = 2;
 
 		for (i = 0; i < numBScanProcessingIteratations; i++)
 		{
@@ -2709,7 +2744,7 @@ void EngineOCT::OpenCLCompute()
 			//            printf("Post-processing...");
 			printf(".");
 
-			res = PostProcess(bmpMinVal, bmpMaxVal);
+			res = PostProcess(MinValue, MaxValue);
 			if (res != CL_SUCCESS)
 			{
 				printf("Failed with error: %i\n", res);
@@ -2742,7 +2777,7 @@ void EngineOCT::OpenCLCompute()
 				//	//printf("%f\n", logEnv[j]);
 				//}
 
-				if (saveBmp) {
+				if (!saveBmp) {
 					for (j = 0; j < numBScansPerBatch; j++)
 					{
 
@@ -2750,7 +2785,7 @@ void EngineOCT::OpenCLCompute()
 						sprintf(bmpPath, "%sbscan%0.4i.bmp\0", rootPath, i*numBScansPerBatch + j);
 						//SaveBitmapFromFloatArray(bmpPath,&logEnv[j*numAScansPerBScan*outputLen], (unsigned short)numAScansPerBScan, outputLen, outputLen/2, bmpMinVal, bmpMaxVal);
 
-						SaveBitmap(bmpPath, &bscanBmp[j*totalBScanSize], numAScansPerBScan, outputImageHeight, totalBScanSize);
+						SaveBitmap(bmpPath, &bscanBmp[j*totalBScanSize], NumAScansPerBScan, OutputImageHeight, totalBScanSize);
 					}
 
 				}
@@ -2763,7 +2798,7 @@ void EngineOCT::OpenCLCompute()
 
 		printf("Processing B Scans: SUCCESS \n");
 
-		this->numBScanProcessingIteratations = numBScanProcessingIteratations;
+		this->NumBScanProcessingIteratations = numBScanProcessingIteratations;
 		this->ComputeCrossCorrelation();
 	}
 
@@ -2800,10 +2835,10 @@ void EngineOCT::ComputeCrossCorrelation()
 	this->CompositeResults.clear();
 	this->CorrelationResults.clear();
 
-	for (int batchNum = 0; batchNum < numBScanProcessingIteratations; batchNum++) {
+	for (int batchNum = 0; batchNum < NumBScanProcessingIteratations; batchNum++) {
 
 		printf("Performing Cross Correlation batch %d of %d \n",
-			(batchNum + 1), numBScanProcessingIteratations);
+			(batchNum + 1), NumBScanProcessingIteratations);
 
 		cl_uint batchSizePlus;
 		unsigned char* tempBScanData;
@@ -2811,11 +2846,11 @@ void EngineOCT::ComputeCrossCorrelation()
 		int size;
 
 
-		if (batchNum == numBScanProcessingIteratations - 1)
+		if (batchNum == NumBScanProcessingIteratations - 1)
 		{
 			//Copy top 50 bScans to GPU
 			batchSizePlus = _numBScans;
-			volumnSizePlus = 500 * 512 * batchSizePlus * 3;
+			volumnSizePlus = NumAScansPerBScan * OutputImageHeight * batchSizePlus * 3;
 
 			size = (sizeof(unsigned char) * volumnSizePlus);
 			tempBScanData = (unsigned char*)malloc(size);
@@ -2823,8 +2858,8 @@ void EngineOCT::ComputeCrossCorrelation()
 			int index00 = (_numBScans * batchNum);
 			int index01 = (_numBScans * (batchNum + 1));
 
-			std::copy(BScanResults.begin() + (index00 * 512 * 500 * 3),
-				BScanResults.begin() + (index01 * 512 * 500 * 3),
+			std::copy(BScanResults.begin() + (index00 * OutputImageHeight * NumAScansPerBScan * 3),
+				BScanResults.begin() + (index01 * OutputImageHeight * NumAScansPerBScan * 3),
 				tempBScanData);
 
 		}
@@ -2832,7 +2867,7 @@ void EngineOCT::ComputeCrossCorrelation()
 		{
 			//Copy top 51 bScans to GPU
 			batchSizePlus = _numBScans + 1;
-			volumnSizePlus = 500 * 512 * batchSizePlus * 3;
+			volumnSizePlus = NumAScansPerBScan * OutputImageHeight * batchSizePlus * 3;
 
 			size = (sizeof(unsigned char) * volumnSizePlus);
 			tempBScanData = (unsigned char*)malloc(size);
@@ -2840,8 +2875,8 @@ void EngineOCT::ComputeCrossCorrelation()
 			int index00 = (_numBScans * batchNum);
 			int index01 = (_numBScans * (batchNum + 1)) + 1;
 
-			std::copy(BScanResults.begin() + (index00 * 512 * 500 * 3),
-				BScanResults.begin() + (index01 * 512 * 500 * 3),
+			std::copy(BScanResults.begin() + (index00 * OutputImageHeight * NumAScansPerBScan * 3),
+				BScanResults.begin() + (index01 * OutputImageHeight * NumAScansPerBScan * 3),
 				tempBScanData);
 
 		}
