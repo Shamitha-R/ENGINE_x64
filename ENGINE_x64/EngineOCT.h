@@ -36,6 +36,8 @@ public:
 	int FilterWindowX;
 	int FilterWindowY;
 	int NumBScanProcessingIteratations;
+	int TotalBScans;
+	int BScanBatchSize;
 
 	void LoadOCTData();
 	void OpenCLCompute();
@@ -51,7 +53,6 @@ private:
 	int clOCTInit(cl_uint clDeviceIndex,
 		cl_uint inputSpectraLength,
 		cl_uint outputAScanLength,
-		cl_uint numBScans,
 		float* hostResamplingTable,
 		float* hostReferenceSpectrum,
 		float* hostReferenceAScan,
@@ -67,8 +68,7 @@ private:
 	int clAlloc(
 		cl_context context,
 		cl_uint inputSpectraLength,		
-		cl_uint outputAScanLength,		
-		cl_uint numBScans,               
+		cl_uint outputAScanLength,		              
 		float* hostResamplingTable,		
 		float* hostInterpolationMatrix,		
 		float* hostReferenceSpectrum,	

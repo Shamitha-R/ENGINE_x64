@@ -17,8 +17,9 @@ void TW_CALL LoadDataFunc(void *clientData)
 
 void TW_CALL ExecuteOCTProccessing(void *clientData)
 {
-	EngineOCT *oct = (EngineOCT *)(clientData);
-	oct->OpenCLCompute();
+	Engine *engine = (Engine *)(clientData);
+	engine->OCT.OpenCLCompute();
+	engine->PassRenderData();
 }
 
 void TW_CALL ComputeCorrelation(void *clientData)
@@ -43,12 +44,11 @@ void UI::InitialiseUI(int screenWidth,int screenHeight, Engine &engine)
 	bar = TwNewBar("Functions");
 	TwDefine(" GLOBAL help='Test Functions' "); // Message added to the help bar.
 	TwAddButton(bar, "LoadData", LoadDataFunc, &engine.OCT, " label='Load OCT Data' ");
-	TwAddButton(bar, "ExecuteProcessing", ExecuteOCTProccessing, &engine.OCT, " label='Execute Processing' ");
-	TwAddButton(bar, "OutputBScans", ExecuteOCTProccessing, &engine.OCT, " label='Output BScans' ");
-	TwAddButton(bar, "OutputCResults", ExecuteOCTProccessing, &engine.OCT, " label='Output Correlation Results' ");
-	TwAddButton(bar, "OutputComposite", ExecuteOCTProccessing, &engine.OCT, " label='Output Vasculature' ");
+	TwAddButton(bar, "ExecuteProcessing", ExecuteOCTProccessing, &engine, " label='Execute Processing' ");
+	//TwAddButton(bar, "OutputBScans", ExecuteOCTProccessing, &engine.OCT, " label='Output BScans' ");
+	//TwAddButton(bar, "OutputCResults", ExecuteOCTProccessing, &engine.OCT, " label='Output Correlation Results' ");
+	//TwAddButton(bar, "OutputComposite", ExecuteOCTProccessing, &engine.OCT, " label='Output Vasculature' ");
 	TwAddButton(bar, "ComputeCorrelation", ComputeCorrelation, &engine, " label='Compute Correlation' ");
-
 
 	parametersBar = TwNewBar("Render Parameters");
 	TwAddVarRW(parametersBar, "kernelSizeX", TW_TYPE_INT32, &engine.OCT.KernelSizeX,
@@ -63,6 +63,10 @@ void UI::InitialiseUI(int screenWidth,int screenHeight, Engine &engine)
 	computeParameters = TwNewBar("Compute Parameters");
 	TwAddVarRW(computeParameters, "AScanCount", TW_TYPE_INT32, &engine.OCT.NumAScans,
 		" label='A-Scan Count'");
+	TwAddVarRW(computeParameters, "BScanCount", TW_TYPE_INT32, &engine.OCT.TotalBScans,
+		" label='B-Scan Count'");
+	TwAddVarRW(computeParameters, "BScanBatchSize", TW_TYPE_INT32, &engine.OCT.BScanBatchSize,
+		" label='B-Scan Batch Size'");
 	TwAddVarRW(computeParameters, "MaxValue", TW_TYPE_FLOAT, &engine.OCT.MaxValue,
 		" label='Max Value'");
 	TwAddVarRW(computeParameters, "MinValue", TW_TYPE_FLOAT, &engine.OCT.MinValue,

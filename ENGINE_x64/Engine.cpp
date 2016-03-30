@@ -8,6 +8,8 @@
 #include <gtc/matrix_transform.hpp>
 #include <gtx/transform.hpp>
 
+#include <Commdlg.h>
+
 int TW_CALL TwEventSDL20(const void *sdlEvent)
 {
 	int handled = 0;
@@ -272,6 +274,8 @@ void Engine::RenderEngine()
 float mfRot[3];
 int x, y;
 
+
+
 // Macro to draw the quad.
 // Performance can be achieved by making a call list.
 // To make it simple i am not using that now :-)
@@ -287,6 +291,43 @@ GLfloat dOrthoSize = 1.0f;
 			glTexCoord3f(0.0f, 1.0f, ((float)TexIndex+1.0f)/2.0f);  \
 			glVertex3f(-dOrthoSize,dOrthoSize,TexIndex);
 glm::vec2 rotRef;
+
+void RenderTexture(double mdRotation[16], int lCount)
+{
+	glMatrixMode(GL_TEXTURE);
+	glLoadIdentity();
+
+	// Translate and make 0.5f as the center 
+	// (texture co ordinate is from 0 to 1. so center of rotation has to be 0.5f)
+	glTranslatef(0.5f, 0.5f, 0.5f);
+
+
+	//glScaled(2.0f, 2.0f, 2.0f);
+
+	// A scaling applied to normalize the axis 
+	// (Usually the number of slices will be less so if this is not - 
+	// normalized then the z axis will look bulky)
+	// Flipping of the y axis is done by giving a negative value in y axis.
+	// This can be achieved either by changing the y co ordinates in -
+	// texture mapping or by negative scaling of y axis
+	glScaled(((float)500 / (float)500)*2.0f,
+		(-1.0f*(float)500 / (float)(float)512)*2.0f,
+		((float)500 / (float)lCount)*2.0f);
+
+	glMultMatrixd(mdRotation);
+
+	glTranslatef(-0.5f, -0.5f, -0.5f);
+
+	glEnable(GL_TEXTURE_3D);
+	glBindTexture(GL_TEXTURE_3D, 1);
+	for (float fIndx = -1.0f; fIndx <= 1.0f; fIndx += 0.01f)
+	{
+		glBegin(GL_QUADS);
+		MAP_3DTEXT(fIndx);
+		glEnd();
+	}
+}
+bool enableRendering = false;
 void Render(SDL_Window* EngineWindow,double mdRotation[16],int lCount)
 {
 	SDL_GetMouseState(&x, &y);
@@ -329,38 +370,8 @@ void Render(SDL_Window* EngineWindow,double mdRotation[16],int lCount)
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	glMatrixMode(GL_TEXTURE);
-	glLoadIdentity();
-
-	// Translate and make 0.5f as the center 
-	// (texture co ordinate is from 0 to 1. so center of rotation has to be 0.5f)
-	glTranslatef(0.5f, 0.5f, 0.5f);
-
-
-	//glScaled(2.0f, 2.0f, 2.0f);
-
-	// A scaling applied to normalize the axis 
-	// (Usually the number of slices will be less so if this is not - 
-	// normalized then the z axis will look bulky)
-	// Flipping of the y axis is done by giving a negative value in y axis.
-	// This can be achieved either by changing the y co ordinates in -
-	// texture mapping or by negative scaling of y axis
-	glScaled(((float)500 / (float)500)*2.0f,
-		(-1.0f*(float)500 / (float)(float)512)*2.0f,
-			((float)500 / (float)lCount)*2.0f);
-
-	glMultMatrixd(mdRotation);
-
-	glTranslatef(-0.5f, -0.5f, -0.5f);
-
-	glEnable(GL_TEXTURE_3D);
-	glBindTexture(GL_TEXTURE_3D, 1);
-	for (float fIndx = -1.0f; fIndx <= 1.0f; fIndx += 0.01f)
-	{
-		glBegin(GL_QUADS);
-		MAP_3DTEXT(fIndx);
-		glEnd();
-	}
+	if (enableRendering)
+		RenderTexture(mdRotation,lCount);
 
 	TwDraw();
 
@@ -373,15 +384,12 @@ int main(int argc, char *argv[])
 {
 	Engine engine;
 
-	engine.OCT.LoadOCTData();
-	engine.OCT.OpenCLCompute();
-
 	engine.EngineRenderer.InitializeEngine();
 
 	UI engineUI;
 	engineUI.InitialiseUI(1280, 720, engine);
 
-	engine.PassRenderData();
+	//engine.PassRenderData();
 
 	engine.TerminateEngine = false;
 	while (!engine.TerminateEngine)
@@ -400,5 +408,6 @@ void Engine::PassRenderData()
 		OCT.CompositeResults.begin() + ((500 * 512 * 4)) * RenderLayerCount);
 
 	EngineRenderer.InitializeRenderData(testData,RenderLayerCount);
+	enableRendering = true;
 }
 
