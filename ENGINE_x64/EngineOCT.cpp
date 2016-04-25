@@ -96,8 +96,6 @@ void EngineOCT::LoadOCTData()
 	//std::cout << "Spectra.bin successfully read\n";
 }
 
-
-
 //
 // Create some global variables
 //
@@ -1081,90 +1079,6 @@ int PreProcess(short* hostSpectra, int windowType)
 	return 0;
 }
 
-//void TestBMP(std::vector<float> &data)
-//{
-//	std::vector<std::vector<float>> corrCoeff;
-//	for (int row = 0; row < 512; row++)
-//	{
-//		std::vector<float> rowData00;
-//
-//		for (int col = 0; col < (500 * 3); col += 3)
-//		{
-//			rowData00.push_back(data[col + (500 * row * 3)]);
-//		}
-//		corrCoeff.push_back(rowData00);
-//	}
-//
-//	int w = 500;
-//	int h = 512;
-//
-//	FILE *f = nullptr;
-//	if (f)
-//		free(f);
-//
-//	unsigned char *img = NULL;
-//	int filesize = 54 + 3 * w*h;  //w is your image width, h is image height, both int
-//	if (img)
-//		free(img);
-//	img = (unsigned char *)malloc(3 * w*h);
-//	memset(img, 0, sizeof(img));
-//
-//	for (int xCor = 0; xCor < w; xCor++)
-//	{
-//		for (int yCor = 0; yCor < h; yCor++)
-//		{
-//			int x = xCor;
-//			int y = (h - 1) - yCor;
-//			int r = corrCoeff[yCor][xCor];
-//			int g = corrCoeff[yCor][xCor];
-//			int b = corrCoeff[yCor][xCor];
-//			if (r > 255) r = 255;
-//			if (g > 255) g = 255;
-//			if (b > 255) b = 255;
-//			img[(x + y*w) * 3 + 2] = (unsigned char)(r);
-//			img[(x + y*w) * 3 + 1] = (unsigned char)(g);
-//			img[(x + y*w) * 3 + 0] = (unsigned char)(b);
-//		}
-//	}
-//
-//	unsigned char bmpfileheader[14] = { 'B','M', 0,0,0,0, 0,0, 0,0, 54,0,0,0 };
-//	unsigned char bmpinfoheader[40] = { 40,0,0,0, 0,0,0,0, 0,0,0,0, 1,0, 24,0 };
-//	unsigned char bmppad[3] = { 0,0,0 };
-//
-//	bmpfileheader[2] = (unsigned char)(filesize);
-//	bmpfileheader[3] = (unsigned char)(filesize >> 8);
-//	bmpfileheader[4] = (unsigned char)(filesize >> 16);
-//	bmpfileheader[5] = (unsigned char)(filesize >> 24);
-//
-//	bmpinfoheader[4] = (unsigned char)(w);
-//	bmpinfoheader[5] = (unsigned char)(w >> 8);
-//	bmpinfoheader[6] = (unsigned char)(w >> 16);
-//	bmpinfoheader[7] = (unsigned char)(w >> 24);
-//	bmpinfoheader[8] = (unsigned char)(h);
-//	bmpinfoheader[9] = (unsigned char)(h >> 8);
-//	bmpinfoheader[10] = (unsigned char)(h >> 16);
-//	bmpinfoheader[11] = (unsigned char)(h >> 24);
-//
-//
-//	std::string str = "./results/aaaaaaaa" +
-//		std::to_string(1)
-//		+ ".bmp";
-//	const char* gfgfg = str.c_str();
-//
-//	f = fopen(gfgfg, "wb");
-//	fwrite(bmpfileheader, 1, 14, f);
-//	fwrite(bmpinfoheader, 1, 40, f);
-//	for (int imgIndex = 0; imgIndex < h; imgIndex++)
-//	{
-//		fwrite(img + (w*(imgIndex - 1) * 3), 3, w, f);
-//		fwrite(bmppad, 1, (4 - (w * 3) % 4) % 4, f);
-//	}
-//
-//	free(img);
-//
-//	fclose(f);
-//
-//}
 
 int SaveBitmapVec(
 	unsigned char* pixelArray,       // In bitmap format (including padding)
@@ -1439,97 +1353,6 @@ int EngineOCT::FilterPostProcess(int batchNum,int batchSize,std::vector<float> &
 		double sumCorr = std::accumulate(noiseDataCorr.begin(), noiseDataCorr.end(), 0.0f);
 		double meanCorr = sumCorr / noiseDataCorr.size();
 		CorrNoiseList.push_back(meanCorr);
-
-		//std::replace_if(corrResult.begin(), corrResult.end(),
-		//	[meanCorr](float value)
-		//{
-		//	if (value < meanCorr)
-		//		return true;
-		//	else
-		//		return false;
-		//}
-		//, 0);
-
-		////Now use the B-Scan to filter only the areas of the correlation map
-		////that are contributed to by actual OCT signal rather than  noise.
-		//std::vector<float> cmOCTFiltered = corrResult;
-		//for (int i = 0; i < cmOCTFiltered.size(); i++)
-		//{
-		//	if (i < (400 * 500)) {
-		//		if (avgBScan[i+(500)] == 0)
-		//			cmOCTFiltered[i] = 0;
-		//	}
-		//}
-
-		//The filtered cmOCT gives the location of the vasculature
-		//Now extract the corresponding regions from the original OCT data
-		//std::vector<float> originalBScan(filterResults.begin() + (500 * 512 * bScanNum)
-		//	, filterResults.begin() + (500 * 512 * (bScanNum + 1)));
-
-		//std::vector<float> vasculature(500 * 512 * 3);
-
-		//for (int i = 0; i < cmOCTFiltered.size(); i++)
-		//{
-		//	vasculature[i * 3] = originalBScan[i];
-		//	vasculature[(i * 3) + 1] = originalBScan[i];
-		//	vasculature[(i * 3) + 2] = originalBScan[i];
-
-		//	if (i >= 500) {
-		//		if (cmOCTFiltered[i - 500] == 0) {
-		//			vasculature[i * 3] = 0;
-		//			vasculature[(i * 3) + 1] = 0;
-		//			vasculature[(i * 3) + 1] = 0;
-		//		}
-		//	}
-		//}
-
-		//int ignoreSize = 16 * 500;
-		//std::vector<unsigned char> testVec;
-		//for (int i = 0; i < (500 * 512); i++)
-		//{
-		//	if (i >= ignoreSize &&
-		//		i < ((200 * 500) + ignoreSize)) {
-		//		testVec.push_back(vasculature[i*3]);
-		//		//testVec.push_back(vasculature[i*3]);
-		//		//testVec.push_back(vasculature[i*3]);
-		//	}
-		//}
-
-		//std::string str = "./results/vas" +
-		//	std::to_string(0 + (0 * 1000) + 2)
-		//	+ ".bmp";
-		//const char* fileName = str.c_str();
-		//SaveBitmapVec(testVec.data(), 500, (200), 500 * (200) * 3, fileName);
-
-		////*********************************** Compositing *******************************************
-		//std::vector<float> composite(500 * 512 * 4);
-
-		//for (int i = 0; i < (500 * 512); i++)
-		//{
-		//	if (vasculature[i * 3] > 0) {
-		//		composite[i * 4] = vasculature[i*3];
-		//		composite[(i * 4) + 1] = 0;
-		//		composite[(i * 4) + 2] = 0;
-		//	}
-		//	else
-		//	{
-		//		composite[i * 4] = originalBScan[i];
-		//		composite[(i * 4) + 1] = originalBScan[i];
-		//		composite[(i * 4) + 2] = originalBScan[i];
-		//	}
-
-		//	if (originalBScan[i] < 50 || i < (15*500))
-		//		composite[(i * 4) + 3] = 0;
-		//	else
-		//		composite[(i * 4) + 3] = originalBScan[i];
-		//}
-
-		//compositeResults.insert(compositeResults.end(),
-		//	composite.begin(),composite.end());
-
-		/*std::vector<float> dsds(composite.begin(),
-			composite.begin() + (500 * 512 * 4));
-		TestBMP(dsds,bScanNum+(batchNum*1000));*/
 	}
 
 	//************************************** Composite ************************************** 
@@ -1595,34 +1418,6 @@ int EngineOCT::FilterPostProcess(int batchNum,int batchSize,std::vector<float> &
 	compositeResults.insert(compositeResults.end(),
 		compositeOutput.begin(),
 		compositeOutput.end());
-
-	//for (int bScanNum = 0; bScanNum < batchSize - 1; bScanNum++)
-	//{
-	//	int ignoreSize = 14 * NumAScansPerBScan * 4;
-	//	std::vector<unsigned char> testVec;
-	//	for (int i = 0; i < (NumAScansPerBScan * OutputImageHeight * 4); i += 4)
-	//	{
-	//		if (i >= ignoreSize &&
-	//			i < ((400 * NumAScansPerBScan * 4) + ignoreSize)) {
-	//			testVec.push_back(compositeOutput[i + (bScanNum * totalWorkItems * 4)]);
-	//			testVec.push_back(compositeOutput[i + (bScanNum * totalWorkItems * 4)] + 1);
-	//			testVec.push_back(compositeOutput[i + (bScanNum * totalWorkItems * 4)] + 2);
-	//		}
-	//	}
-
-	//	std::string str = "./results/composite" +
-	//		std::to_string(bScanNum + (batchNum * 1000) + 2)
-	//		+ ".bmp";
-	//	const char* fileName = str.c_str();
-	//	SaveBitmapVec(testVec.data(), NumAScansPerBScan, (400), NumAScansPerBScan * (400) * 3, fileName);
-	//}
-
-	//for (int bScanNum = 0; bScanNum < batchSize - 1; bScanNum++)
-	//{
-	//	std::vector<float> dsds(compositeOutput.begin() + (bScanNum * (500*512*4)),
-	//		compositeOutput.begin() + (500 * 512 * 4) + (bScanNum * (500 * 512 * 4)));
-	//	TestBMP(dsds,bScanNum+(batchNum*1000));
-	//}
 
 	return 0;
 }
@@ -2267,59 +2062,6 @@ int clOCTDispose()
 
 	return 0;
 }
-
-int CalculateCoeff(int i1p1, int i1p2, int i1p3, int i1p4, float i1Mean,
-	int i2p1, int i2p2, int i2p3, int i2p4, float i2Mean)
-{
-	int result = 0;
-
-	int numerator = 0;
-	int denominator00 = 0;
-	int denominator01 = 0;
-
-	float diffI1 = 0;
-	float diffI2 = 0;
-
-	diffI1 = i1p1 - i1Mean;
-	diffI2 = i2p1 - i2Mean;
-
-	numerator += diffI1 * diffI2;
-	denominator00 += diffI1 * diffI1;
-	denominator01 += diffI2 * diffI2;
-
-	diffI1 = i1p2 - i1Mean;
-	diffI2 = i2p2 - i2Mean;
-
-	numerator += diffI1 * diffI2;
-	denominator00 += diffI1 * diffI1;
-	denominator01 += diffI2 * diffI2;
-
-	diffI1 = i1p3 - i1Mean;
-	diffI2 = i2p3 - i2Mean;
-
-	numerator += diffI1 * diffI2;
-	denominator00 += diffI1 * diffI1;
-	denominator01 += diffI2 * diffI2;
-
-	diffI1 = i1p4 - i1Mean;
-	diffI2 = i2p4 - i2Mean;
-
-	numerator += diffI1 * diffI2;
-	denominator00 += diffI1 * diffI1;
-	denominator01 += diffI2 * diffI2;
-
-	float coeff = numerator / (sqrt(denominator00) * sqrt(denominator01));
-
-	if (numerator == 0 || denominator00 == 0 || denominator01 == 0)
-	{
-		result = 0;
-	}
-	else
-		result = abs(1 - coeff) * 255;
-
-	return result;
-}
-
 
 void EngineOCT::OpenCLCompute()
 {

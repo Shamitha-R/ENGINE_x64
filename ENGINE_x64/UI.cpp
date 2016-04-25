@@ -4,7 +4,6 @@ UI::UI()
 {
 }
 
-
 UI::~UI()
 {
 }
@@ -37,19 +36,19 @@ void UI::InitialiseUI(int screenWidth,int screenHeight, Engine &engine)
 
 	TwInit(TW_OPENGL,NULL);
 
-	// Tell the window size to AntTwfeakBar
+	// Tell the window size to AntTweakBar
 	TwWindowSize(screenWidth, screenHeight);
 
-	// Create a tweak bar
+	//UI Layout
+
+	//Functions Tab
 	bar = TwNewBar("Functions");
 	TwDefine(" GLOBAL help='Test Functions' "); // Message added to the help bar.
 	TwAddButton(bar, "LoadData", LoadDataFunc, &engine.OCT, " label='Load OCT Data' ");
 	TwAddButton(bar, "ExecuteProcessing", ExecuteOCTProccessing, &engine, " label='Execute Processing' ");
-	//TwAddButton(bar, "OutputBScans", ExecuteOCTProccessing, &engine.OCT, " label='Output BScans' ");
-	//TwAddButton(bar, "OutputCResults", ExecuteOCTProccessing, &engine.OCT, " label='Output Correlation Results' ");
-	//TwAddButton(bar, "OutputComposite", ExecuteOCTProccessing, &engine.OCT, " label='Output Vasculature' ");
 	TwAddButton(bar, "ComputeCorrelation", ComputeCorrelation, &engine, " label='Compute Correlation' ");
 
+	//Parameters Tab
 	parametersBar = TwNewBar("Render Parameters");
 	TwAddVarRW(parametersBar, "kernelSizeX", TW_TYPE_INT32, &engine.OCT.KernelSizeX,
 		" label='Kernel size X'");
@@ -60,6 +59,7 @@ void UI::InitialiseUI(int screenWidth,int screenHeight, Engine &engine)
 	TwAddVarRW(parametersBar, "FilterWindowY", TW_TYPE_INT32, &engine.OCT.FilterWindowY,
 		" label='Filter Window Y'");
 
+	//Compute Parameters Tab
 	computeParameters = TwNewBar("Compute Parameters");
 	TwAddVarRW(computeParameters, "AScanCount", TW_TYPE_INT32, &engine.OCT.NumAScans,
 		" label='A-Scan Count'");

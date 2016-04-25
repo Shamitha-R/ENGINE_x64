@@ -115,112 +115,6 @@ Engine::~Engine()
 	EngineContentManager::FreeResources();
 }
 
-std::vector<float> RemoveNoise(std::vector<float> &originalBScan,std::vector<float> &corrResult)
-{
-	std::vector<float> avgBScan = originalBScan;
-
-	//Threshold BScan
-	int topIgnoreSize = 15 * 500 * 3;
-	int dataIgnoreSize = 199 * 500 * 3;
-
-	std::vector<float> noiseDataBScan;
-
-	for (int i = 0; i < 51;i++)
-	{
-		noiseDataBScan.insert(noiseDataBScan.end(),
-			&avgBScan[((i*500*3) + topIgnoreSize + dataIgnoreSize)], 
-			&avgBScan[((i*500*3) + topIgnoreSize + dataIgnoreSize) + (499*3)]);
-	}
-
-	double sumBScan = std::accumulate(noiseDataBScan.begin(), noiseDataBScan.end(), 0.0);
-	double meanBScan = sumBScan / noiseDataBScan.size();
-
-	std::vector<double> diff(noiseDataBScan.size());
-	std::transform(noiseDataBScan.begin(), noiseDataBScan.end(), diff.begin(),
-		std::bind2nd(std::minus<double>(), meanBScan));
-	double sq_sum = std::inner_product(diff.begin(), diff.end(), diff.begin(), 0.0);
-	double stdevBScan = std::sqrt(sq_sum / noiseDataBScan.size());
-
-	float noiseFloorBScan = meanBScan + 3 * stdevBScan;
-
-	std::replace_if(avgBScan.begin(), avgBScan.end(),
-		[noiseFloorBScan](float value)
-	{
-		if (value < noiseFloorBScan)
-			return true;
-		else
-			return false;
-	}, 0);
-
-	//Threshold correlation Map
-	int topIgnoreCorr = 5 * 500;
-
-	std::vector<float> noiseDataCorr;
-
-	for (int i = 0; i < 10; i++)
-	{
-		noiseDataCorr.insert(noiseDataCorr.end(),
-			&corrResult[(i * 500) + topIgnoreCorr],
-			&corrResult[((i * 500) + topIgnoreCorr) + (499)]);
-	}
-
-
-	double sumCorr = std::accumulate(noiseDataCorr.begin(), noiseDataCorr.end(), 0.0f);
-	double meanCorr = sumCorr / noiseDataCorr.size();
-
-	std::replace_if(corrResult.begin(),corrResult.end(),
-	[meanCorr](float value)
-	{
-		if (value < meanCorr)
-			return true;
-		else
-			return false;
-	}
-	, 0);
-
-	//Now use the B-Scan to filter only the areas of the correlation map
-	//that are contributed to by actual OCT signal rather than  noise.
-	for (int i = 0; i < corrResult.size();i++)
-	{
-		if (avgBScan[i * 3] == 0)
-			corrResult[i] = 0;
-	}
-
-	//The filtered cmOCT gives the location of the vasculature
-	//Now extract the corresponding regions from the original OCT data
-	std::vector<float> vasculature = originalBScan;
-
-	for (int i = 0; i < corrResult.size(); i++)
-	{
-		if (corrResult[i] == 0)
-			vasculature[i*3] = 0;
-	}
-
-	//TestBMP(vasculature);
-
-	//*********************************** Compositing *******************************************
-	std::vector<float> composite(500*512*3);
-
-	for (int i = 0; i < (500*512);i++)
-	{
-		if (vasculature[i * 3] > 0) {
-			composite[i * 3] = vasculature[i * 3];
-			composite[(i * 3) + 1] = 0;
-			composite[(i * 3) + 2] = 0;
-		}else
-		{
-			composite[i * 3] = originalBScan[i * 3];
-			composite[(i * 3) + 1] = originalBScan[(i * 3) + 1];
-			composite[(i * 3) + 2] = originalBScan[(i * 3) + 2];
-		}
-	}
-
-	//Remove top area
-	//std::vector<float> result(composite.begin() + topIgnoreSize, composite.end());
-
-	return originalBScan;
-}
-
 void Engine::InitalizeEngine()
 {
 
@@ -228,56 +122,13 @@ void Engine::InitalizeEngine()
 
 void Engine::UpdateEngine(GLfloat engineTime)
 {
-	if (SDL_PollEvent(&(this->EngineEvent)) != 0)
-	{
-		//int uiEvent = TwEventSDL20(&(this->EngineEvent));
 
-		//if (!uiEvent) {
-
-			//if (this->EngineEvent.type == SDL_QUIT)
-			//{
-				//this->TerminateEngine = true;
-			//}
-			//else if (this->EngineEvent.type == SDL_KEYDOWN &&
-			//	this->EngineEvent.key.repeat == 0)
-			//{
-			//	switch (this->EngineEvent.key.keysym.sym) {
-			//	case SDLK_q:
-			//		if(RenderDepth < EngineSlices.size()-1)
-			//			RenderDepth += 1;
-			//		break;
-			//	case SDLK_w:
-			//		if (RenderDepth > 0)
-			//			RenderDepth -= 1;
-			//		break;
-			//	default:
-			//		break;
-			//	}
-			//}
-		//}
-	}
-}
-
-void Engine::RenderEngine()
-{
-	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-	for (int i = RenderDepth; i < EngineSlices.size(); i++)
-		EngineSlices[i]->Render();
-
-	TwDraw();
-
-	SDL_GL_SwapWindow(this->Renderer.EngineWindow);
 }
 
 float mfRot[3];
 int x, y;
 glm::vec2 rotRef;
-
-SDL_Event EngineEvent2;
 GLfloat dOrthoSize = 1.0f;
-
 float renderDensity = 0.01f;
 void RenderTexture(double mdRotation[16], int lCount, EngineOCT &oct)
 {
@@ -285,15 +136,9 @@ void RenderTexture(double mdRotation[16], int lCount, EngineOCT &oct)
 	glLoadIdentity();
 
 	// Translate and make 0.5f as the center 
-	// (texture co ordinate is from 0 to 1. so center of rotation has to be 0.5f)
 	glTranslatef(0.5f, 0.5f, 0.5f);
 
 	// A scaling applied to normalize the axis 
-	// (Usually the number of slices will be less so if this is not - 
-	// normalized then the z axis will look bulky)
-	// Flipping of the y axis is done by giving a negative value in y axis.
-	// This can be achieved either by changing the y co ordinates in -
-	// texture mapping or by negative scaling of y axis
 	glScaled(((float)oct.NumAScans / (float)oct.NumAScans)*2.0f,
 		(-1.0f*(float)oct.NumAScans / (float)(float)oct.OutputImageHeight)*2.0f,
 		((float)oct.OutputImageHeight / (float)lCount)*2.0f);
@@ -308,43 +153,44 @@ void RenderTexture(double mdRotation[16], int lCount, EngineOCT &oct)
 	{
 		glBegin(GL_QUADS);
 		//Map texels to each Quad
-		glTexCoord3f(0.0f, 0.0f, ((float)TexIndex + 1.0f) / 2.0f);  
-		glVertex3f(-dOrthoSize, -dOrthoSize, TexIndex); 
-		glTexCoord3f(1.0f, 0.0f, ((float)TexIndex + 1.0f) / 2.0f);  
-		glVertex3f(dOrthoSize, -dOrthoSize, TexIndex); 
-		glTexCoord3f(1.0f, 1.0f, ((float)TexIndex + 1.0f) / 2.0f);  
-		glVertex3f(dOrthoSize, dOrthoSize, TexIndex); 
-		glTexCoord3f(0.0f, 1.0f, ((float)TexIndex + 1.0f) / 2.0f);  
+		glTexCoord3f(0.0f, 0.0f, ((float)TexIndex + 1.0f) / 2.0f);
+		glVertex3f(-dOrthoSize, -dOrthoSize, TexIndex);
+		glTexCoord3f(1.0f, 0.0f, ((float)TexIndex + 1.0f) / 2.0f);
+		glVertex3f(dOrthoSize, -dOrthoSize, TexIndex);
+		glTexCoord3f(1.0f, 1.0f, ((float)TexIndex + 1.0f) / 2.0f);
+		glVertex3f(dOrthoSize, dOrthoSize, TexIndex);
+		glTexCoord3f(0.0f, 1.0f, ((float)TexIndex + 1.0f) / 2.0f);
 		glVertex3f(-dOrthoSize, dOrthoSize, TexIndex);
 		glEnd();
 	}
 }
 bool enableRendering = false;
-void Render(SDL_Window* EngineWindow,double mdRotation[16],int lCount, EngineOCT &oct)
+
+void Engine::RenderEngine()
 {
 	SDL_GetMouseState(&x, &y);
-	if (SDL_PollEvent(&(EngineEvent2)) != 0)
+	if (SDL_PollEvent(&(EngineEvent)) != 0)
 	{
-		int uiEvent = TwEventSDL20(&(EngineEvent2));
+		int uiEvent = TwEventSDL20(&(EngineEvent));
 		if (!uiEvent) {
-			if (EngineEvent2.type == SDL_QUIT)
+			if (EngineEvent.type == SDL_QUIT)
 			{
 			}
 			//If a mouse button was pressed
 
-			if (EngineEvent2.button.button == SDL_BUTTON_LEFT)
+			if (EngineEvent.button.button == SDL_BUTTON_LEFT)
 			{
 				mfRot[0] = rotRef.y - y;
 				mfRot[1] = rotRef.x - x;
 				mfRot[2] = 0;
 
 				glMatrixMode(GL_MODELVIEW);
-				glLoadMatrixd(mdRotation);
+				glLoadMatrixd(EngineRenderer.ObjectOrientation);
 				glRotated(mfRot[0], 1.0f, 0, 0);
 				glRotated(mfRot[1], 0, 1.0f, 0);
 				glRotated(mfRot[2], 0, 0, 1.0f);
 
-				glGetDoublev(GL_MODELVIEW_MATRIX, mdRotation);
+				glGetDoublev(GL_MODELVIEW_MATRIX, EngineRenderer.ObjectOrientation);
 				glLoadIdentity();
 
 			}
@@ -357,14 +203,12 @@ void Render(SDL_Window* EngineWindow,double mdRotation[16],int lCount, EngineOCT
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	if (enableRendering)
-		RenderTexture(mdRotation,lCount,oct);
+		RenderTexture(EngineRenderer.ObjectOrientation, RenderLayerCount, this->OCT);
 
 	TwDraw();
 
-	SDL_GL_SwapWindow(EngineWindow);
+	SDL_GL_SwapWindow(this->EngineRenderer.EngineWindow);
 }
-
-
 
 int main(int argc, char *argv[])
 {
@@ -375,14 +219,11 @@ int main(int argc, char *argv[])
 	UI engineUI;
 	engineUI.InitialiseUI(1280, 720, engine);
 
-	//engine.PassRenderData();
-
+	//Main Render Loop
 	engine.TerminateEngine = false;
 	while (!engine.TerminateEngine)
 	{
-		//engine.UpdateEngine(0);
-		Render(engine.EngineRenderer.EngineWindow, 
-			engine.EngineRenderer.ObjectOrientation,engine.RenderLayerCount, engine.OCT);
+		engine.RenderEngine();
 	}
 
 	return 0;

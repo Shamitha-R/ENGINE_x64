@@ -142,8 +142,6 @@ void EngineRenderer::Update()
 
 void EngineRenderer::Render()
 {
-	//Clear color buffer
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 
 void EngineRenderer::InitializeRenderData(std::vector<GLchar> &renderData,int lCount)
