@@ -471,7 +471,7 @@ __kernel void opacityKernel(__global float* compositeResults,
 			compositeResults[(kernelID * 4) + 3 + (targetHeight * targetWidth * 4 * bScanNum)] =
 			compositeResults[(kernelID * 4) + (targetHeight * targetWidth * 4 * bScanNum)];
 
-		if(row <= 15)
+		if (row <= 15)
 			compositeResults[(kernelID * 4) + 3 + (targetHeight * targetWidth * 4 * bScanNum)] = 0;
 	}
 }
@@ -496,14 +496,13 @@ __kernel void compositeKernel(__global float* avgBScanData,
 		avgBScanZero = false;
 		corrZero = false;
 
-		//Replace AVG BScan
-
+		//Masking using B-Scan
 		if (avgBScanData[kernelID + (targetHeight * targetWidth * bScanNum)] <
 			bScanNoiseList[bScanNum]) {
 			avgBScanZero = true;
 		}
 
-		//Replace Correlation 
+		//Mask using correlation map
 		if (kernelID > (1 * targetWidth)) {
 			if (correlationResults[kernelID + (targetHeight * targetWidth * bScanNum) - (targetWidth)] <
 				corrNoiseList[bScanNum]) {
@@ -511,15 +510,13 @@ __kernel void compositeKernel(__global float* avgBScanData,
 			}
 		}
 
-		//Vasculature
-		//if(avgBScanZero == true || corrZero == true){ 
-			compositeResults[(kernelID * 4) + (targetHeight * targetWidth * 4 * bScanNum)]
-				= avgBScanData[kernelID + (targetHeight * targetWidth  * bScanNum)];
-			compositeResults[(kernelID * 4) + 1 + (targetHeight * targetWidth * 4 * bScanNum)]
-				= avgBScanData[kernelID + (targetHeight * targetWidth  * bScanNum)];
-			compositeResults[(kernelID * 4) + 2 + (targetHeight * targetWidth * 4 * bScanNum)]
-				= avgBScanData[kernelID + (targetHeight * targetWidth  * bScanNum)];
-		//}else{ 
+		compositeResults[(kernelID * 4) + (targetHeight * targetWidth * 4 * bScanNum)]
+			= avgBScanData[kernelID + (targetHeight * targetWidth  * bScanNum)];
+		compositeResults[(kernelID * 4) + 1 + (targetHeight * targetWidth * 4 * bScanNum)]
+			= avgBScanData[kernelID + (targetHeight * targetWidth  * bScanNum)];
+		compositeResults[(kernelID * 4) + 2 + (targetHeight * targetWidth * 4 * bScanNum)]
+			= avgBScanData[kernelID + (targetHeight * targetWidth  * bScanNum)];
+ 
 		if (avgBScanZero == true || corrZero == true) {
 			compositeResults[(kernelID * 4) + (targetHeight * targetWidth * 4 * bScanNum)]
 				= 0;
@@ -568,14 +565,19 @@ __kernel void filterKernel(__global float* avgBScanData,
 
 		for (bScanNum = 0; bScanNum < bScanCount - 1; bScanNum++) {
 
+			//Loop through the window row
 			for (windowNumRow = 0; windowNumRow < (windowY); windowNumRow++){
+				//Loop each column for each row
 				for (windowNumCol = 0; windowNumCol < (windowX); windowNumCol++){ 
+					//Add the pixel value to the window array
+					//The window array is accessed as WxH 2d structure
 					window[windowNumCol + (windowNumRow * windowY)] = 
 						avgBScanData[col + (row * targetWidth) + (targetWidth * windowNumRow) +
 						windowNumCol + (bScanNum*imgSize)];
 				}
 			}
 
+			//Insertion sort
 			int temp, i, j;
 			for (i = 0; i < windowX * windowY; i++) {
 				temp = window[i];
@@ -604,15 +606,15 @@ __kernel void bScanAverage(__global unsigned char* bScanData,
 
 	for (bScanNum = 0; bScanNum < bScanCount -1; bScanNum++){
 
+		//Extract Pixel Values 
+		//Multiply by 3 since each pixel has a R,G and B value
 		val00 = bScanData[(bScanNum*imgSize * 3) + (kernelID * 3)];
 		val01 = bScanData[(bScanNum*imgSize * 3) + (kernelID * 3) + (imgSize * 3)];
+		//Calculate the average
 		sum = val00 + val01;
-
-		//if (sum >= 510)
-			//sum = 255;
-		
 		val = (sum)/2.0f;
 		
+		//Place the averaged pixel in the results buffer
 		avgResults[(bScanNum*imgSize) + kernelID] = val00;
 	}
 }

@@ -37,7 +37,9 @@ void EngineOCT::LoadFileData(std::string fileName, std::vector<float> &data)
 	{
 		int splitLoc = 0;
 
+		//Read while EOF
 		while (getline(fileStreamer, currentLine)) {
+			//Find index of EOL and extract line using substring
 			splitLoc = currentLine.find(',', 0);
 			data.push_back(std::stod(currentLine.substr(splitLoc + 1)));
 		}
@@ -94,275 +96,7 @@ void EngineOCT::LoadOCTData()
 	//std::cout << "Spectra.bin successfully read\n";
 }
 
-//void setupTexture()
-//{
-//	for (int i = 0; i < 20*20*3;i++)
-//	{
-//		textureData[i] = ((i*1.0f)/(400*3.0f*1.0f))*255;
-//	}
-//
-//	glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-//	glPixelStorei(GL_PACK_ALIGNMENT, 1);
-//	glGenTextures(1, &textureName);   // generate a texture handler really reccomanded (mandatory in openGL 3.0)
-//	glBindTexture(GL_TEXTURE_2D, textureName); // tell openGL that we are using the texture 
-//
-//	glTexImage2D(GL_TEXTURE_2D, 0, 3, width, height, 0, GL_RGB,
-//		GL_UNSIGNED_BYTE, (GLvoid*)textureData); // send the texture data
-//
-//	 // Set up the texture
-//	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-//	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-//	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-//	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-//
-//	glEnable(GL_TEXTURE_2D);
-//}
-//
-//void updateTexture()
-//{			
-//	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RGB, /* or GL_BGR, depends on how your video is decoded*/
-//		GL_UNSIGNED_BYTE, textureData);
-//
-//	glBindTexture(GL_TEXTURE_2D, textureName);
-//	glBegin(GL_QUADS);  // draw something with the texture on
-//	glTexCoord2f(0.0f, 0.0f); glVertex2f(-0.5f, -0.5f);
-//	glTexCoord2f(1.0f, 0.0f); glVertex2f(0.5f, -0.5f);
-//	glTexCoord2f(1.0f, 1.0f); glVertex2f(0.5f, 0.5f);
-//	glTexCoord2f(0.0f, 1.0f); glVertex2f(-0.5f, 0.5f);
-//	glEnd();
-//}
 
-void EngineRendering(EngineOCT &oct)
-{	
-	//	// Set up vertex data (and buffer(s)) and attribute pointers
-	//	GLfloat vertices[] = {
-	//		// Positions          // Colors           // Texture Coords
-	//		0.5f,  0.5f, 0.0f,   1.0f, 0.0f, 0.0f,   1.0f, 1.0f, // Top Right
-	//		0.5f, -0.5f, 0.0f,   0.0f, 1.0f, 0.0f,   1.0f, 0.0f, // Bottom Right
-	//		-0.5f, -0.5f, 0.0f,   0.0f, 0.0f, 1.0f,   0.0f, 0.0f, // Bottom Left
-	//		-0.5f,  0.5f, 0.0f,   1.0f, 1.0f, 0.0f,   0.0f, 1.0f  // Top Left 
-	//	};
-	//	GLuint indices[] = {  // Note that we start from 0!
-	//		0, 1, 3, // First Triangle
-	//		1, 2, 3  // Second Triangle
-	//	};
-	//	GLuint VBO, VAO, EBO;
-	//	glGenVertexArrays(1, &VAO);
-	//	glGenBuffers(1, &VBO);
-	//	glGenBuffers(1, &EBO);
-
-	//	glBindVertexArray(VAO);
-
-	//	glBindBuffer(GL_ARRAY_BUFFER, VBO);
-	//	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-	//	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-	//	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
-
-	//	// Position attribute
-	//	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (GLvoid*)0);
-	//	glEnableVertexAttribArray(0);
-	//	// Color attribute
-	//	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (GLvoid*)(3 * sizeof(GLfloat)));
-	//	glEnableVertexAttribArray(1);
-	//	// TexCoord attribute
-	//	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (GLvoid*)(6 * sizeof(GLfloat)));
-	//	glEnableVertexAttribArray(2);
-
-	//	glBindVertexArray(0); // Unbind VAO
-
-
-	//						  // Load and create a texture 
-	//	GLuint texture;
-	//	glGenTextures(1, &texture);
-	//	glBindTexture(GL_TEXTURE_2D, texture); // All upcoming GL_TEXTURE_2D operations now have effect on this texture object
-	//
-	//	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);	
-	//	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-	//	//// Set texture filtering parameters
-	//	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	//	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-	//	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	//	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	//	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-	//	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-
-	//	// Load image, create texture and generate mipmaps
-	//	//SDL_Surface* image = engine.LoadSurface("textures/wall.png");
-
-	//	//GLuint textureName;
-	//	const GLsizei width = 500;
-	//	const GLsizei height = 512;
-
-	//	//std::vector<float> imgData(&testPixelData[0], &testPixelData[500*512]);
-
-	//	GLbyte textureData[width * height * 3];
-
-	//	for (int i = 0; i < width*height*3;i+=3)
-	//	{
-	//		textureData[i] = testPixelData[i/3];
-	//		textureData[i+1] = testPixelData[i / 3];
-	//		textureData[i+2] = testPixelData[i / 3];
-	//	}
-
-	//	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, textureData);
-	//	glGenerateMipmap(GL_TEXTURE_2D);
-
-	//	//SDL_FreeSurface(image);
-	//	glBindTexture(GL_TEXTURE_2D, 0); // Unbind texture when done, so we won't accidentily mess up our texture.
-
-
-	//	SDL_Event e;
-	//	SDL_StartTextInput();
-	//	int test;
-	//	float val = 0.0f;
-	//	bool quit = false;
-
-	//	glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 3.0f);
-	//	glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
-	//	glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
-
-	//	GLfloat cameraSpeed = 0.05f;
-	//	SDL_Keycode currentCode;
-
-	//	bool firstMouse = true;
-	//	int xpos, ypos;
-
-	//	GLfloat yaw = -90.0f;	// Yaw is initialized to -90.0 degrees since a yaw of 0.0 results in a direction vector pointing to the right (due to how Eular angles work) so we initially rotate a bit to the left.
-	//	GLfloat pitch = 0.0f;
-	//	GLfloat lastX = 800 / 2.0;
-	//	GLfloat lastY = 600 / 2.0;
-
-	//	float angle = 0.0f;
-
-	//	while (!quit)
-	//	{
-	//		if (SDL_PollEvent(&e) != 0)
-	//		{
-	//			//test = TwEventSDL20(&e, SDL_MAJOR_VERSION, SDL_MINOR_VERSION);
-	//			test = TwEventSDL20(&e);
-
-	//			if (!test) {
-
-	//				if (e.type == SDL_QUIT)
-	//				{
-	//					quit = true;
-	//				}
-	//				else if (e.type == SDL_KEYDOWN && e.key.repeat != 0)
-	//				{
-	//					currentCode = e.key.keysym.sym;
-
-	//					if (currentCode == SDLK_w)
-	//						cameraPos += cameraSpeed * cameraFront;
-	//					if (currentCode == SDLK_s)
-	//						cameraPos -= cameraSpeed * cameraFront;
-	//					if (currentCode == SDLK_a)
-	//						cameraPos -= glm::normalize(
-	//							glm::cross(cameraFront, cameraUp)) * cameraSpeed;
-	//					if (currentCode == SDLK_d)
-	//						cameraPos += glm::normalize(
-	//							glm::cross(cameraFront, cameraUp)) * cameraSpeed;
-	//				}
-	//			}
-
-
-	//			SDL_GetMouseState(&xpos, &ypos);
-
-	//			if (firstMouse)
-	//			{
-	//				lastX = xpos;
-	//				lastY = ypos;
-	//				firstMouse = false;
-	//			}
-	//			GLfloat xoffset = xpos - lastX;
-	//			GLfloat yoffset = lastY - ypos;
-
-	//			lastX = xpos;
-	//			lastY = ypos;
-
-	//			GLfloat sensitivity = 0.05;
-	//			xoffset *= sensitivity;
-	//			yoffset *= sensitivity;
-
-	//			yaw += xoffset;
-	//			pitch += yoffset;
-
-	//			// Make sure that when pitch is out of bounds, screen doesn't get flipped
-	//			if (pitch > 89.0f)
-	//				pitch = 89.0f;
-	//			if (pitch < -89.0f)
-	//				pitch = -89.0f;
-
-	//			glm::vec3 front;
-	//			front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
-	//			front.y = sin(glm::radians(pitch));
-	//			front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
-	//			//cameraFront = glm::normalize(front);
-	//		}
-
-	//		// Render
-	//		// Clear the color buffer
-	//		glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
-	//		glClear(GL_COLOR_BUFFER_BIT);
-
-	//		// Bind Textures using texture units
-	//		glActiveTexture(GL_TEXTURE0);
-	//		glBindTexture(GL_TEXTURE_2D, texture);
-	//		glUniform1i(glGetUniformLocation(ourShader.Program, "ourTexture1"), 0);
-
-	//		// Activate shader
-	//		ourShader.Enable();
-
-	//		// Create transformations
-	//		glm::mat4 model;
-	//		glm::mat4 view;
-	//		glm::mat4 projection;
-
-	//		model = glm::rotate(model, -45.0f, glm::vec3(1.0f, 0.0f, 0.0f));
-
-	//		angle = (400.0f - xpos);
-	//		angle = angle / 360.0f * M_PI * 1.0f;
-	//		model = glm::rotate(model, angle, glm::vec3(0.0f, 0.0f, 1.0f));
-
-	//		view = glm::translate(view, glm::vec3(0.0f, 0.0f, -2.0f));
-	//		projection = glm::perspective(70.0f, (GLfloat)800 / (GLfloat)600, 0.1f, 100.0f);
-	//		// Get their uniform location
-	//		GLint modelLoc = glGetUniformLocation(ourShader.Program, "model");
-	//		GLint viewLoc = glGetUniformLocation(ourShader.Program, "view");
-	//		GLint projLoc = glGetUniformLocation(ourShader.Program, "projection");
-	//		// Pass them to the shaders
-	//		glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-	//		glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
-	//		// Note: currently we set the projection matrix each frame, but since the projection matrix rarely changes it's often best practice to set it outside the main loop only once.
-	//		glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
-
-	//		// Draw container
-	//		glBindVertexArray(VAO);
-	//		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-	//		glBindVertexArray(0);
-
-	//		TwDraw();
-
-	//		SDL_GL_SwapWindow(engine.EngineWindow);
-
-	//		//engine.Render();
-	//	}
-
-
-	//	SDL_StopTextInput();
-	//	// Properly de-allocate all resources once they've outlived their purpose
-	//	glDeleteVertexArrays(1, &VAO);
-	//	glDeleteBuffers(1, &VBO);
-	//}
-
-
-	//// Terminate AntTweakBar
-	//TwTerminate();
-
-	//engine.~EngineRenderer();
-
-}
 
 //
 // Create some global variables
@@ -520,29 +254,36 @@ int clInit(
 										//
 										// Get the number of platforms
 										//
+
+	//Determine the number of installed platforms
 	err = clGetPlatformIDs(NULL, NULL, &numPlatforms);
 	if (err != CL_SUCCESS) return err;
-	//
-	// Create an array to hold the platforms list
-	//
+	// Create an array to hold the platforms list and populate the cl_platform_id structs
 	_platformIDs = (cl_platform_id*)malloc(sizeof(cl_platform_id) * numPlatforms);
 	err = clGetPlatformIDs(numPlatforms, _platformIDs, NULL);
 	if (err != CL_SUCCESS) return err;
+	
 	///
 	// Assume that we can use the first platform in the list.  Most systems will have only one platform installed, i.e. NVIDIA
 	// although it's possible that the Intel SDK could also be installed.
 	//
 	if (numPlatforms < 1)
 		return -1;
-	//
+
 	// Get a list of the platform IDs associated with the first platform
-	//
-	err = clGetDeviceIDs(_platformIDs[SELECTED_PLATFORM], CL_DEVICE_TYPE_ALL, 0, NULL, &_numDevices);	// Get the number of devices
+	// Get the number of devices
+	err = clGetDeviceIDs(_platformIDs[SELECTED_PLATFORM], CL_DEVICE_TYPE_ALL, 
+		0, NULL, &_numDevices);	
 	if (err < 0)
 		return err;
-	_deviceIDs = (cl_device_id*)malloc(_numDevices*sizeof(cl_device_id));	// Allocate an array for the devices
-	_deviceNameList = (char**)malloc(_numDevices * sizeof(char*));		// Allocate a list of pointers to device names
-	err = clGetDeviceIDs(_platformIDs[SELECTED_PLATFORM], CL_DEVICE_TYPE_ALL, _numDevices, _deviceIDs, NULL);	// Populate the array with the device IDs
+	// Allocate an array for the devices
+	_deviceIDs = (cl_device_id*)malloc(_numDevices*sizeof(cl_device_id));	
+	// Allocate a list of pointers to device names
+	_deviceNameList = (char**)malloc(_numDevices * sizeof(char*));		
+	// Populate the array with the device IDs
+	err = clGetDeviceIDs(_platformIDs[SELECTED_PLATFORM], CL_DEVICE_TYPE_ALL, 
+		_numDevices, _deviceIDs, NULL);	
+
 	if (err < 0)
 		return err;
 	//
@@ -574,16 +315,16 @@ int clInit(
 	//
 	*deviceNameList = _deviceNameList;
 	*numDevicesInList = _numDevices;
-	//
-	// Create a context for GPU execution - use the first platform for now
-	//
-	*clContext = clCreateContext(NULL, 1, &_deviceIDs[_selectedDeviceIndex], NULL, NULL, &err);
+
+	// Create a context for GPU execution 
+	*clContext = clCreateContext(NULL, 1, &_deviceIDs[_selectedDeviceIndex], 
+		NULL, NULL, &err);
 	if (err < 0)
 		return err;
-	//
 	// Create a command queue on which to execute the OCT processing pipeline
-	//
-	*clCommandQueue = clCreateCommandQueue(*clContext, _deviceIDs[_selectedDeviceIndex], 0, &err);
+	*clCommandQueue = clCreateCommandQueue(*clContext, _deviceIDs[_selectedDeviceIndex], 
+		NULL, &err);
+
 	if (err < 0)
 		return err;
 
@@ -638,12 +379,19 @@ int EngineOCT::clAlloc(
 	if (err != CL_SUCCESS)
 		return err;
 
-	//BScanData for correlation
-	bScanCorrData = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_ALLOC_HOST_PTR,
-		sizeof(unsigned char) * corrSize, NULL, &err);
+	//Buffer containing BScanData for correlation
+	bScanCorrData = clCreateBuffer(context, CL_MEM_READ_ONLY,
+		sizeof(unsigned char) * (size_t)(BScanBatchSize + 1) * (size_t)BScanAverage * 
+		_bitmapBScanSize, NULL, &err);
 	if (err != CL_SUCCESS)
 		return err;
 
+	//Buffer containg the Vasculature Results 
+	deviceCompositeResults = clCreateBuffer(context, CL_MEM_READ_WRITE,
+		sizeof(float)*(OutputImageHeight * NumAScansPerBScan * 4 * (BScanBatchSize + 1)), 
+		NULL, &err);
+	if (err != CL_SUCCESS)
+		return err;
 
 
 	//
@@ -715,11 +463,7 @@ int EngineOCT::clAlloc(
 	if (err != CL_SUCCESS)
 		return err;
 
-	//Composite Results 
-	deviceCompositeResults = clCreateBuffer(context, CL_MEM_READ_WRITE,
-		sizeof(float)*(OutputImageHeight * NumAScansPerBScan * 4 * (BScanBatchSize + 1)), NULL, &err);
-	if (err != CL_SUCCESS)
-		return err;
+
 
 	deviceBscanNoiseList = clCreateBuffer(context, CL_MEM_READ_WRITE,
 		sizeof(float)*((BScanBatchSize + 1)), NULL, &err);
@@ -756,31 +500,27 @@ int clOCTCompileKernels(char* sourceFile, char* build_log,
 
 	if (sourceLength < 0)
 		return sourceLength;
-	//
-	// Enable the openCL library to create a program from the source code
-	//
-	_clOCTProgram = clCreateProgramWithSource(_context, 1, (const char**)&kernelSource, NULL, &err);
+
+	// Enable the OpenCL library to create a program from the source code
+	_clOCTProgram = clCreateProgramWithSource(_context, 1, (const char**)&kernelSource,
+		NULL, &err);
 	if (err != CL_SUCCESS)
 		return err;
-
-	//
 	// Build the kernels that reside within the source
-	//
-	//err = clBuildProgram(_clOCTProgram, _numDevices, _deviceIDs, NULL, NULL, NULL); 
-	//   const char options[] = "-Werror -cl-std=CL1.1";
-	//    error = clBuildProgram(program, 1, &device, options, NULL, NULL);
-	err = clBuildProgram(_clOCTProgram, NUM_DEVICES_TO_BUILD_FOR, &_deviceIDs[_selectedDeviceIndex], _compilerOptions, NULL, NULL);
+	err = clBuildProgram(_clOCTProgram, NUM_DEVICES_TO_BUILD_FOR, 
+		&_deviceIDs[_selectedDeviceIndex], _compilerOptions, NULL, NULL);
+
 	if (err != CL_SUCCESS)
 	{
-		//
 		// If there was an error, get the build log
-		//
-		clGetProgramBuildInfo(_clOCTProgram, _deviceIDs[_selectedDeviceIndex], CL_PROGRAM_BUILD_LOG, 0, NULL, &log_size);	// Get the size of the build log
+		clGetProgramBuildInfo(_clOCTProgram, _deviceIDs[_selectedDeviceIndex], 
+			CL_PROGRAM_BUILD_LOG, 0, NULL, &log_size);	// Get the size of the build log
 																															//build_log = (char*)malloc(sizeof(char)*log_size + 1);		// Allocate memory for the log
 		if (log_size > *buildLogLength)
 			build_log = "Insufficient space to store build log.\0";
 		else
-			clGetProgramBuildInfo(_clOCTProgram, _deviceIDs[_selectedDeviceIndex], CL_PROGRAM_BUILD_LOG, log_size, build_log, NULL);
+			clGetProgramBuildInfo(_clOCTProgram, _deviceIDs[_selectedDeviceIndex], 
+				CL_PROGRAM_BUILD_LOG, log_size, build_log, NULL);
 		//
 		// Terminate with null character
 		//
@@ -1592,6 +1332,8 @@ float standard_deviation(std::vector<float> &data)
 	return sqrt(sum_deviation / n);
 }
 
+float totduration;
+
 int EngineOCT::FilterPostProcess(int batchNum,int batchSize,std::vector<float> &correlationResults,
 	std::vector<float> &compositeResults)
 {
@@ -1606,7 +1348,7 @@ int EngineOCT::FilterPostProcess(int batchNum,int batchSize,std::vector<float> &
 	err = clSetKernelArg(avgKernel, 1, sizeof(cl_uint), &batchSize);
 
 	err = clEnqueueNDRangeKernel(_commandQueue, avgKernel, 1, NULL, 
-		&totalWorkItems, &numWorkItemsPerGroup, 0, NULL, NULL);
+		&totalWorkItems, NULL, 0, NULL, NULL);
 	if (err != CL_SUCCESS)
 		return err;
 
@@ -1616,7 +1358,6 @@ int EngineOCT::FilterPostProcess(int batchNum,int batchSize,std::vector<float> &
 		sizeof(float)*(NumAScansPerBScan * OutputImageHeight * (batchSize - 1)), 
 		avgResults.data(), 0, NULL, NULL);
 	if (err != CL_SUCCESS) return err;
-
 
 	//Perform median filtering
 	err = clSetKernelArg(filterKernel, 3, sizeof(cl_uint), &batchSize);
@@ -1632,6 +1373,7 @@ int EngineOCT::FilterPostProcess(int batchNum,int batchSize,std::vector<float> &
 		sizeof(float)*(NumAScansPerBScan * OutputImageHeight * (batchSize - 1)), filterResults.data(), 0, NULL, NULL);
 	if (err != CL_SUCCESS) 
 		return err;
+
 
 	int topIgnoreSize = 15 * NumAScansPerBScan;
 	int dataIgnoreSize = 199 * NumAScansPerBScan;
@@ -1649,7 +1391,7 @@ int EngineOCT::FilterPostProcess(int batchNum,int batchSize,std::vector<float> &
 
 		std::vector<float> noiseDataBScan;
 
-		for (int i = 0; i < batchSize; i++)
+		for (int i = 0; i < 50; i++)
 		{
 			noiseDataBScan.insert(noiseDataBScan.end(),
 				&avgBScan[((i * NumAScansPerBScan) + topIgnoreSize + dataIgnoreSize)],
@@ -1657,18 +1399,17 @@ int EngineOCT::FilterPostProcess(int batchNum,int batchSize,std::vector<float> &
 				+ (NumAScansPerBScan)]);
 		}
 
+		//Calculate mean
 		double sumBScan = std::accumulate(noiseDataBScan.begin(), noiseDataBScan.end(), 0.0);
 		double meanBScan = sumBScan / noiseDataBScan.size();
-
+		//Calculate standard deviation
 		std::vector<double> diff(noiseDataBScan.size());
 		std::transform(noiseDataBScan.begin(), noiseDataBScan.end(), diff.begin(),
 			std::bind2nd(std::minus<double>(), meanBScan));
 		double sq_sum = std::inner_product(diff.begin(), diff.end(), diff.begin(), 0.0);
 		double stdevBScan = std::sqrt(sq_sum / noiseDataBScan.size());
-
-		float test = standard_deviation(noiseDataBScan);
-
-		float noiseFloorBScan = meanBScan + 3 * stdevBScan;
+		//3 SD Threshold value
+		float noiseFloorBScan = meanBScan - 3 * stdevBScan;
 		BScanNoiseList.push_back(noiseFloorBScan);
 
 		//std::replace_if(avgBScan.begin(), avgBScan.end(),
@@ -1822,9 +1563,15 @@ int EngineOCT::FilterPostProcess(int batchNum,int batchSize,std::vector<float> &
 	std::vector<float> compositeOutput(NumAScansPerBScan * OutputImageHeight * 4 
 		* (batchSize - 1));
 
+	clFlush(_commandQueue);
+
+
 	//err = clEnqueueReadBuffer(_commandQueue, deviceCompositeResults, CL_TRUE, 0,
 		//sizeof(float)*(500 * 512 * 4 * (batchSize - 1)), compositeOutput.data(), 0, NULL, NULL);
 	//if (err != CL_SUCCESS) return err;
+
+	//Time clock
+	std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
 
 	//Set Opacity
 	err = clSetKernelArg(opacityKernel, 1, sizeof(cl_uint), &batchSize);
@@ -1838,6 +1585,12 @@ int EngineOCT::FilterPostProcess(int batchNum,int batchSize,std::vector<float> &
 	sizeof(float)*(NumAScansPerBScan * OutputImageHeight * 4 * (batchSize - 1)), 
 		compositeOutput.data(), 0, NULL, NULL);
 	if (err != CL_SUCCESS) return err;
+
+	//Read Time
+	std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
+	float duration = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
+	totduration += duration;
+
 
 	compositeResults.insert(compositeResults.end(),
 		compositeOutput.begin(),
@@ -1878,18 +1631,19 @@ int EngineOCT::ComputeCorrelation(int batchNum, int batchSize,std::vector<float>
 {
 	bool saveBMP = true;
 	cl_int err;
+
 	size_t numWorkItemsPerGroup = 1;
 	size_t totalWorkItems = NumAScansPerBScan * OutputImageHeight;
-
+	
+	//Add kernel execute operation to command queue
 	err = clEnqueueNDRangeKernel(_commandQueue, corrKernel, 1, NULL, 
 		&totalWorkItems, &numWorkItemsPerGroup, 0, NULL, NULL);
-
 	if (err != CL_SUCCESS)
 		return err;
-
+	//Array to contain the computed correlation maps
 	float* correlationMap;
 	correlationMap = (float*)malloc(sizeof(float) * _totalAScans * _outputAScanLength);
-
+	//Populate the array with the results
 	err = clEnqueueReadBuffer(_commandQueue, deviceCorrelationMap, CL_TRUE, 0, 
 		sizeof(float)*_totalAScans * _outputAScanLength, correlationMap, 0, NULL, NULL);
 	if (err != CL_SUCCESS) return err;
@@ -2566,8 +2320,10 @@ int CalculateCoeff(int i1p1, int i1p2, int i1p3, int i1p4, float i1Mean,
 	return result;
 }
 
+
 void EngineOCT::OpenCLCompute()
 {
+
 	cl_uint clDeviceIndex = GPU_DEVICE_INDEX;
 
 	size_t localWorkSize = 2;
@@ -2590,8 +2346,8 @@ void EngineOCT::OpenCLCompute()
 
 	this->KernelSizeX = 6;
 	this->KernelSizeY = 6;
-	this->FilterWindowX = 5;
-	this->FilterWindowY = 5;
+	this->FilterWindowX = 3;
+	this->FilterWindowY = 3;
 
 	unsigned int saveBmp = true;
 
@@ -2644,8 +2400,8 @@ void EngineOCT::OpenCLCompute()
 	char* rootPath;//="/Users/phtomlins/Google Drive/OCT Data/Test/";
 	char bmpPath[2048];
 
-	kernelPath = "test.cl";
-	rootPath = "./test/";
+	kernelPath = "enginekernels.cl";
+	rootPath = "./enginekernels/";
 
 	//
 	// Try to read the reference spectrum and resampling table
@@ -2708,6 +2464,8 @@ void EngineOCT::OpenCLCompute()
 		KernelSizeY
 		);
 
+
+
 	if (res != CL_SUCCESS)
 	{
 		printf("\nError %d, Build log output:\n", res);
@@ -2716,10 +2474,11 @@ void EngineOCT::OpenCLCompute()
 	}
 	else
 	{
+
 		printf("Processing %i B-Scans in batches of %i, each batch comprising %i A-Scans...\n",
 			TotalBScans, BScanBatchSize, totalAScans);
 
-		NumBScanProcessingIteratations = 2;
+		//NumBScanProcessingIteratations = 2;
 
 		for (i = 0; i < NumBScanProcessingIteratations; i++)
 		{
@@ -2830,7 +2589,9 @@ void EngineOCT::OpenCLCompute()
 	free(bscanBmp);
 	free(buildLog);
 
-	printf("CL compute Done.\n");
+	printf("B-Scan compute Done.\n");
+
+
 }
 
 void EngineOCT::ComputeCrossCorrelation()
@@ -2838,6 +2599,8 @@ void EngineOCT::ComputeCrossCorrelation()
 	int res;
 	this->CompositeResults.clear();
 	this->CorrelationResults.clear();
+
+	totduration = 0.0f;
 
 	for (int batchNum = 0; batchNum < NumBScanProcessingIteratations; batchNum++) {
 

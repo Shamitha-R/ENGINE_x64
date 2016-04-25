@@ -9,6 +9,7 @@
 #include <gtx/transform.hpp>
 
 #include <Commdlg.h>
+#include <chrono>
 
 int TW_CALL TwEventSDL20(const void *sdlEvent)
 {
@@ -259,7 +260,6 @@ void Engine::UpdateEngine(GLfloat engineTime)
 
 void Engine::RenderEngine()
 {
-
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -273,26 +273,13 @@ void Engine::RenderEngine()
 
 float mfRot[3];
 int x, y;
-
-
-
-// Macro to draw the quad.
-// Performance can be achieved by making a call list.
-// To make it simple i am not using that now :-)
-SDL_Event EngineEvent2;
-GLfloat dOrthoSize = 1.0f;
-#define MAP_3DTEXT( TexIndex ) \
-            glTexCoord3f(0.0f, 0.0f, ((float)TexIndex+1.0f)/2.0f);  \
-			glVertex3f(-dOrthoSize,-dOrthoSize,TexIndex);\
-			glTexCoord3f(1.0f, 0.0f, ((float)TexIndex+1.0f)/2.0f);  \
-			glVertex3f(dOrthoSize,-dOrthoSize,TexIndex);\
-			glTexCoord3f(1.0f, 1.0f, ((float)TexIndex+1.0f)/2.0f);  \
-			glVertex3f(dOrthoSize,dOrthoSize,TexIndex);\
-			glTexCoord3f(0.0f, 1.0f, ((float)TexIndex+1.0f)/2.0f);  \
-			glVertex3f(-dOrthoSize,dOrthoSize,TexIndex);
 glm::vec2 rotRef;
 
-void RenderTexture(double mdRotation[16], int lCount)
+SDL_Event EngineEvent2;
+GLfloat dOrthoSize = 1.0f;
+
+float renderDensity = 0.01f;
+void RenderTexture(double mdRotation[16], int lCount, EngineOCT &oct)
 {
 	glMatrixMode(GL_TEXTURE);
 	glLoadIdentity();
@@ -301,34 +288,39 @@ void RenderTexture(double mdRotation[16], int lCount)
 	// (texture co ordinate is from 0 to 1. so center of rotation has to be 0.5f)
 	glTranslatef(0.5f, 0.5f, 0.5f);
 
-
-	//glScaled(2.0f, 2.0f, 2.0f);
-
 	// A scaling applied to normalize the axis 
 	// (Usually the number of slices will be less so if this is not - 
 	// normalized then the z axis will look bulky)
 	// Flipping of the y axis is done by giving a negative value in y axis.
 	// This can be achieved either by changing the y co ordinates in -
 	// texture mapping or by negative scaling of y axis
-	glScaled(((float)500 / (float)500)*2.0f,
-		(-1.0f*(float)500 / (float)(float)512)*2.0f,
-		((float)500 / (float)lCount)*2.0f);
+	glScaled(((float)oct.NumAScans / (float)oct.NumAScans)*2.0f,
+		(-1.0f*(float)oct.NumAScans / (float)(float)oct.OutputImageHeight)*2.0f,
+		((float)oct.OutputImageHeight / (float)lCount)*2.0f);
 
 	glMultMatrixd(mdRotation);
 
 	glTranslatef(-0.5f, -0.5f, -0.5f);
-
+	//Texture Mapping
 	glEnable(GL_TEXTURE_3D);
 	glBindTexture(GL_TEXTURE_3D, 1);
-	for (float fIndx = -1.0f; fIndx <= 1.0f; fIndx += 0.01f)
+	for (float TexIndex = -1.0f; TexIndex <= 1.0f; TexIndex += renderDensity)
 	{
 		glBegin(GL_QUADS);
-		MAP_3DTEXT(fIndx);
+		//Map texels to each Quad
+		glTexCoord3f(0.0f, 0.0f, ((float)TexIndex + 1.0f) / 2.0f);  
+		glVertex3f(-dOrthoSize, -dOrthoSize, TexIndex); 
+		glTexCoord3f(1.0f, 0.0f, ((float)TexIndex + 1.0f) / 2.0f);  
+		glVertex3f(dOrthoSize, -dOrthoSize, TexIndex); 
+		glTexCoord3f(1.0f, 1.0f, ((float)TexIndex + 1.0f) / 2.0f);  
+		glVertex3f(dOrthoSize, dOrthoSize, TexIndex); 
+		glTexCoord3f(0.0f, 1.0f, ((float)TexIndex + 1.0f) / 2.0f);  
+		glVertex3f(-dOrthoSize, dOrthoSize, TexIndex);
 		glEnd();
 	}
 }
 bool enableRendering = false;
-void Render(SDL_Window* EngineWindow,double mdRotation[16],int lCount)
+void Render(SDL_Window* EngineWindow,double mdRotation[16],int lCount, EngineOCT &oct)
 {
 	SDL_GetMouseState(&x, &y);
 	if (SDL_PollEvent(&(EngineEvent2)) != 0)
@@ -364,14 +356,8 @@ void Render(SDL_Window* EngineWindow,double mdRotation[16],int lCount)
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	glEnable(GL_ALPHA_TEST);
-	glAlphaFunc(GL_GREATER, 0.05f);
-
-	glEnable(GL_BLEND);
-	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
 	if (enableRendering)
-		RenderTexture(mdRotation,lCount);
+		RenderTexture(mdRotation,lCount,oct);
 
 	TwDraw();
 
@@ -396,7 +382,7 @@ int main(int argc, char *argv[])
 	{
 		//engine.UpdateEngine(0);
 		Render(engine.EngineRenderer.EngineWindow, 
-			engine.EngineRenderer.ObjectOrientation,engine.RenderLayerCount);
+			engine.EngineRenderer.ObjectOrientation,engine.RenderLayerCount, engine.OCT);
 	}
 
 	return 0;
@@ -409,5 +395,6 @@ void Engine::PassRenderData()
 
 	EngineRenderer.InitializeRenderData(testData,RenderLayerCount);
 	enableRendering = true;
+
 }
 

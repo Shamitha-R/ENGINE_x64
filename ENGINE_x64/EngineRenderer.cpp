@@ -65,7 +65,7 @@ bool EngineRenderer::InitializeEngine()
 			else
 			{
 				//Get window surface
-				gScreenSurface = SDL_GetWindowSurface(EngineWindow);
+				//gScreenSurface = SDL_GetWindowSurface(EngineWindow);
 			}
 
 			//Create context
@@ -104,7 +104,7 @@ bool EngineRenderer::InitializeOpenGL()
 
 	GLenum error = GL_NO_ERROR;
 
-	glClearColor(0.f, 0.f, 0.f, 1.0f);
+	//glClearColor(0.f, 0.f, 0.f, 1.0f);
 
 	glewExperimental = GL_TRUE;
 	error = glewInit();
@@ -113,14 +113,14 @@ bool EngineRenderer::InitializeOpenGL()
 
 	}
 
+	//Set Dynamic scalling with aspect ratio
 	glViewport(0, 0, 1280, 720);
 	glMatrixMode(GL_PROJECTION);
 	float aspect = (float)1280 / (float)720;
 	glOrtho(-aspect, aspect, -1, 1, -1, 1);
-
-	glMatrixMode(GL_MODELVIEW);
-	glLoadIdentity();
-
+	//Enable transparency
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 	printf("OpenGL Device: (%s): \n", glGetString(GL_RENDERER));
 
@@ -151,18 +151,20 @@ void EngineRenderer::InitializeRenderData(std::vector<GLchar> &renderData,int lC
 	int texID = 0;
 	glGenTextures(1, (GLuint*)&texID);
 
+	//Only one 3D texture is used
+	//Thereofore the texture ID can always be set to a constant value
 	texID = 1;
-
+	//Bind texture, set clamping and filtering method
 	glBindTexture(GL_TEXTURE_3D, texID);
-	glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
 	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
 	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_BORDER);
 	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-
+	//Create texture with the data
 	glTexImage3D(GL_TEXTURE_3D, 0, GL_RGBA, 500, 512, lCount, 0,
 		GL_RGBA, GL_UNSIGNED_BYTE, renderData.data());
+
 	glBindTexture(GL_TEXTURE_3D, 0);
 
 	ObjectOrientation[0] = ObjectOrientation[5] = ObjectOrientation[10] = ObjectOrientation[15] = 1.0;

@@ -19,7 +19,7 @@ class Engine
 
 		std::vector<EngineObject*> EngineSlices;
 		int RenderDepth;
-		int RenderLayerCount = 30;
+		int RenderLayerCount = 400;
 		
 		Engine();
 		~Engine();
